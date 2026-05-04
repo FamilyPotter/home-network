@@ -1,0 +1,76 @@
+# =============================================================================
+# FamilyPotter Home Network Stack
+# QNAP TS-264 — Container Station
+#
+# Topology:
+#   eth0 (24:5E:BE:6D:25:88) → Starlink Gen 3 LAN port (WAN uplink, CGNAT)
+#   eth1 (24:5E:BE:6D:25:89) → Home LAN switch (gateway 192.168.0.150/24)
+#
+# Services:
+#   adguardhome  — DHCP server + DNS resolver + ad/tracker blocking
+#   tailscale    — VPN (CGNAT-compatible, no port forwarding required)
+#
+# Note: ddclient (DynDNS) removed — Starlink CGNAT makes DDNS non-routable.
+#   Tailscale provides all remote access without a public IP.
+#   ddclient/ddclient.conf is retained for reference if Starlink Priority
+#   (public IP) is ever activated.
+#
+# Start:  docker compose up -d
+# Stop:   docker compose down
+# Logs:   docker compose logs -f [service]
+# Update: docker compose pull && docker compose up -d
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # AdGuard Home — DNS + DHCP + Ad/Tracker Blocking
+  #
+  # MUST use network_mode: host so that:
+  #   1. DHCP broadcasts (UDP 67/68) reach all LAN devices
+  #   2. DNS client source IPs are preserved (not NATted to 172.x bridge)
+  #
+  # Web UI: http://192.168.0.150:3000
+  #   (port 80 avoided — QNAP QTS web interface occupies it)
+  # ---------------------------------------------------------------------------
+  adguardhome:
+    image: adguard/adguardhome:latest
+    container_name: adguardhome
+    network_mode: host
+    volumes:
+      - ./adguard/conf:/opt/adguardhome/conf
+      - ./adguard/work:/opt/adguardhome/work
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN      # Required for DHCP server to set raw socket options
+      - NET_RAW
+    environment:
+      - TZ=${TZ}
+
+  # ---------------------------------------------------------------------------
+  # Tailscale — Remote Access VPN
+  #
+  # Works through Starlink CGNAT without port forwarding.
+  # Acts as a subnet router — remote devices can reach all of 192.168.0.0/24.
+  #
+  # First run: check logs for auth URL, or use TS_AUTHKEY in .env
+  # Dashboard: https://login.tailscale.com/admin
+  # ---------------------------------------------------------------------------
+  tailscale:
+    image: tailscale/tailscale:latest
+    container_name: tailscale
+    network_mode: host
+    volumes:
+      - ./tailscale:/var/lib/tailscale
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    environment:
+      - TZ=${TZ}
+      - TS_AUTHKEY=${TS_AUTHKEY}
+      - TS_HOSTNAME=${TS_HOSTNAME:-familypotter-nas}
+      - TS_EXTRA_ARGS=--advertise-routes=192.168.0.0/24 --accept-dns=false
+      - TS_STATE_DIR=/var/lib/tailscale
+    restart: unless-stopped
+

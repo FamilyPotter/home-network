@@ -1,0 +1,32 @@
+# =============================================================================
+# FamilyPotter Network Stack — .gitignore
+# =============================================================================
+
+# Secrets — never commit these
+.env
+DDNS/ddclient.conf
+
+# Tailscale state directory contains WireGuard private keys
+VPN/tailscale/
+
+# AdGuard Home runtime/work directory — large, changes constantly, not config
+AdGuard/work/
+
+# WireGuard private keys (if ever generated)
+VPN/wireguard/*.conf
+VPN/wireguard/privatekey
+VPN/wireguard/publickey
+!VPN/wireguard/README-wireguard.md
+
+# QNAP / Windows artefacts
+.vs/
+*.slnx
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# Cursor IDE
+.cursor/
+
+# macOS
+.DS_Store

@@ -1,0 +1,292 @@
+# =============================================================================
+# AdGuard Home Configuration
+# FamilyPotter Home Network — QNAP TS-264
+#
+# This file is read on container start. After first-run wizard completes,
+# AdGuard Home merges its settings into this file.
+#
+# Key roles:
+#   1. DHCP server for 192.168.0.0/24 (replaces Sky ER110)
+#   2. DNS resolver with upstream DoH providers
+#   3. Network-wide ad/tracker/malware blocking
+#   4. Local DNS records (hostname.lan resolution)
+#
+# Web UI: http://192.168.0.150:3000
+# =============================================================================
+
+http:
+  pprof:
+    port: 6060
+    enabled: false
+  address: 0.0.0.0:3000          # Port 80 reserved for QNAP QTS web interface
+  session_ttl: 720h
+
+users:
+  - name: admin
+    password: ""                  # Set during first-run wizard at :3000
+
+auth_attempts: 5
+block_auth_min: 15
+http_proxy: ""
+language: en
+theme: auto
+
+dns:
+  bind_hosts:
+    - 192.168.0.150              # Listen only on LAN interface — never expose DNS to WAN
+  port: 53
+  anonymize_client_ip: false
+  ratelimit: 20
+  ratelimit_subnet_len_ipv4: 24
+  ratelimit_subnet_len_ipv6: 56
+  ratelimit_whitelist: []
+  refuse_any: true
+  upstream_dns:
+    - https://1.1.1.1/dns-query  # Cloudflare DoH (primary)
+    - https://1.0.0.1/dns-query  # Cloudflare DoH (secondary)
+    - https://8.8.8.8/dns-query  # Google DoH (fallback)
+    - https://8.8.4.4/dns-query  # Google DoH (fallback)
+  upstream_dns_file: ""
+  bootstrap_dns:
+    - 1.1.1.1
+    - 8.8.8.8
+  fallback_dns:
+    - 8.8.8.8
+    - 8.8.4.4
+  upstream_mode: load_balance
+  fastest_timeout: 1s
+  allowed_clients: []
+  disallowed_clients: []
+  blocked_hosts:
+    - version.bind
+    - id.server
+    - hostname.bind
+  trusted_proxies:
+    - 127.0.0.0/8
+    - ::1/128
+  cache_size: 4194304            # 4MB DNS cache
+  cache_ttl_min: 0
+  cache_ttl_max: 0
+  cache_optimistic: true
+  bogus_nxdomain: []
+  aaaa_disabled: false
+  enable_dnssec: true
+  edns_client_subnet:
+    custom_ip: ""
+    enabled: false
+    use_custom: false
+  max_goroutines: 300
+  handle_ddr: true
+  ipset: []
+  ipset_file: ""
+  bootstrap_prefer_ipv6: false
+  filtering_enabled: true
+  filters_update_interval: 24
+  parental_block_host: family-block.dns.adguard.com
+  safebrowsing_block_host: standard-block.dns.adguard.com
+  rewrites:
+    # Local DNS entries — devices resolvable by hostname on the LAN
+    - domain: nas.lan
+      answer: 192.168.0.150
+    - domain: qnap.lan
+      answer: 192.168.0.150
+    - domain: promax.lan
+      answer: 192.168.0.68
+    - domain: maindesk.lan
+      answer: 192.168.0.72
+    - domain: fingbox.lan
+      answer: 192.168.0.144
+    - domain: sonosfamily.lan
+      answer: 192.168.0.97
+    - domain: sonoslounge.lan
+      answer: 192.168.0.93
+    - domain: sonosdining.lan
+      answer: 192.168.0.95
+    - domain: sonosbed.lan
+      answer: 192.168.0.98
+    - domain: sonoskitchen.lan
+      answer: 192.168.0.80
+    - domain: sonoseddy.lan
+      answer: 192.168.0.67
+    - domain: sonosgym.lan
+      answer: 192.168.0.94
+  blocked_services:
+    schedule:
+      time_zone: Europe/London
+    ids: []
+  local_domain_name: lan
+  resolve_clients: true
+  use_private_ptr_resolvers: true
+  local_ptr_resolvers:
+    - "[/0.168.192.in-addr.arpa/]#"
+
+filtering:
+  blocking_ipv4: ""
+  blocking_ipv6: ""
+  blocked_response_ttl: 10
+  protection_enabled: true
+  filtering_enabled: true
+  parental_enabled: false
+  safe_browsing_enabled: true
+  safe_browsing_cache_size: 1048576
+  safe_search:
+    enabled: false
+    bing: false
+    duckduckgo: false
+    ecosia: false
+    google: false
+    pixabay: false
+    yandex: false
+    youtube: false
+  parental_cache_size: 1048576
+  check_host_timeout: 10s
+  filters_update_interval: 24h
+
+filters:
+  - enabled: true
+    url: https://adguardteam.github.io/AdGuardSDNSFilter/Filters/filter.txt
+    name: AdGuard DNS filter
+    id: 1
+  - enabled: true
+    url: https://adaway.org/hosts.txt
+    name: AdAway Default Blocklist
+    id: 2
+  - enabled: true
+    url: https://www.malwaredomainlist.com/hostslist/hosts.txt
+    name: MalwareDomainList.com Hosts List
+    id: 4
+  - enabled: true
+    url: https://someonewhocares.org/hosts/zero/hosts
+    name: Dan Pollock's List
+    id: 5
+  - enabled: true
+    url: https://raw.githubusercontent.com/nicehash/NiceHashQuickMiner/master/build/MinerBlockList.txt
+    name: NiceHash Miner Blocklist
+    id: 6
+  - enabled: true
+    url: https://urlhaus-filter.pages.dev/urlhaus-filter-agh.txt
+    name: URLhaus Malicious URL Blocklist
+    id: 7
+
+whitelist_filters: []
+user_rules: []
+
+dhcp:
+  enabled: true
+  interface_name: eth1           # LAN-facing NIC (MAC 24:5E:BE:6D:25:89)
+  local_domain_name: lan
+  dhcpv4:
+    gateway_ip: 192.168.0.150   # QNAP eth1 — this device is the gateway
+    subnet_mask: 255.255.255.0
+    range_start: 192.168.0.51   # Dynamic pool start (matches Sky ER110 MinAddress)
+    range_end: 192.168.0.249    # Dynamic pool end
+    lease_duration: 86400       # 24 hours
+    icmp_timeout_msec: 1000
+    options:
+      - code: 6                 # DNS server option — point all clients to AdGuard Home
+        type: ips
+        value: 192.168.0.150
+      - code: 15                # Domain name
+        type: text
+        value: lan
+  dhcpv6:
+    range_start: ""
+    lease_duration: 86400
+    ra_slaac_only: false
+    ra_allow_slaac: true        # Allow SLAAC for IPv6 from Starlink prefix delegation
+
+  # ---------------------------------------------------------------------------
+  # Static DHCP Leases — migrated from Sky ER110 DHCPConditionalServingPool
+  # All 14 reservations preserved with original MAC/IP/hostname
+  # ---------------------------------------------------------------------------
+  static_leases:
+
+    # Sonos speakers — grouped .67–.98
+    - hw_addr: b8:e9:37:9d:19:aa
+      ip: 192.168.0.97
+      hostname: SonosFamily
+
+    - hw_addr: b8:e9:37:ab:36:80
+      ip: 192.168.0.93
+      hostname: SonosLounge
+
+    - hw_addr: b8:e9:37:ab:32:00
+      ip: 192.168.0.95
+      hostname: SonosDining
+
+    - hw_addr: b8:e9:37:ab:29:b6
+      ip: 192.168.0.98
+      hostname: SonosBed
+
+    - hw_addr: 94:9f:3e:72:fd:cc
+      ip: 192.168.0.80
+      hostname: SonosKitchen
+
+    - hw_addr: 94:9f:3e:1f:fa:ec
+      ip: 192.168.0.67
+      hostname: SonosEddy
+
+    - hw_addr: b8:e9:37:ab:29:ec
+      ip: 192.168.0.94
+      hostname: SonosGym
+
+    # Desktop / workstation
+    - hw_addr: 30:d0:42:ff:9e:0f
+      ip: 192.168.0.72
+      hostname: MAINDESK
+
+    # QNAP NAS management interfaces (statically configured in QTS, but
+    # reservations kept here so AdGuard logs show correct hostnames)
+    - hw_addr: 24:5e:be:6d:25:88
+      ip: 192.168.0.150
+      hostname: QNAP-NAS-eth0
+
+    - hw_addr: 24:5e:be:6d:25:89
+      ip: 192.168.0.151
+      hostname: QNAP-NAS-eth1
+
+    # Apple Mac Pro
+    - hw_addr: e8:cf:83:8e:0b:69
+      ip: 192.168.0.68
+      hostname: PROMAX
+
+    # czkawka dedup service (virtual/container MAC)
+    - hw_addr: 02:eb:43:1c:19:40
+      ip: 192.168.0.78
+      hostname: czkawka-dedup
+
+    # Fingbox network monitor
+    - hw_addr: f0:23:b9:eb:12:f9
+      ip: 192.168.0.144
+      hostname: Fingbox
+
+    # Family iPad (randomised MAC — update if iOS rotates it)
+    - hw_addr: c6:6f:be:a5:27:fd
+      ip: 192.168.0.70
+      hostname: Family-iPad
+
+clients:
+  runtime_sources:
+    whois: true
+    arp: true
+    rdns: true
+    dhcp: true
+    hosts: true
+  persistent: []
+
+log:
+  enabled: true
+  file: ""
+  max_backups: 0
+  max_size: 100
+  max_age: 3
+  compress: false
+  local_time: true
+  verbose: false
+
+os:
+  group: ""
+  user: ""
+  rlimit_nofile: 0
+
+schema_version: 28

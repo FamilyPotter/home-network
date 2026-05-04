@@ -1,0 +1,97 @@
+# =============================================================================
+# FamilyPotter Home Network Stack
+# QNAP TS-264 — Container Station
+#
+# Topology:
+#   eth0 (24:5E:BE:6D:25:88) → Starlink Gen 3 LAN port  (WAN, CGNAT uplink)
+#   eth1 (24:5E:BE:6D:25:89) → Home LAN switch           (gateway 192.168.0.150/24)
+#
+# Services:
+#   adguardhome  — DHCP + DNS resolver + ad/tracker/malware blocking
+#   tailscale    — VPN remote access (works through CGNAT, no port-forward needed)
+#   ddclient     — Dynamic DNS updater for familypotter.ddns.net
+#
+# On QNAP, copy this entire folder to:
+#   /share/CACHEDEV1_DATA/Container/familypotter-network/
+# Then: docker compose up -d
+#
+# Useful commands:
+#   docker compose up -d                 Start all services
+#   docker compose pull && docker compose up -d   Update images
+#   docker compose logs -f adguardhome  Tail AdGuard logs
+#   docker compose down                  Stop all services
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # AdGuard Home — DNS + DHCP + Ad/Tracker Blocking
+  #
+  # network_mode: host is mandatory for:
+  #   - DHCP broadcasts (UDP 67/68) to reach all LAN devices
+  #   - DNS source IPs to be preserved (client-level logging and rules)
+  #
+  # Web UI: http://192.168.0.150:3000
+  #   Port 80 is reserved by QNAP QTS — do not change to 80.
+  # ---------------------------------------------------------------------------
+  adguardhome:
+    image: adguard/adguardhome:latest
+    container_name: adguardhome
+    network_mode: host
+    volumes:
+      - ./AdGuard/conf:/opt/adguardhome/conf
+      - ./AdGuard/work:/opt/adguardhome/work
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    environment:
+      - TZ=${TZ}
+
+  # ---------------------------------------------------------------------------
+  # Tailscale — Remote Access VPN
+  #
+  # Advertises 192.168.0.0/24 as a subnet route so remote Tailscale clients
+  # can reach every home device by its LAN IP when away from home.
+  #
+  # First run: check logs for auth URL, or pre-supply TS_AUTHKEY in .env
+  #   docker compose logs tailscale
+  # Admin: https://login.tailscale.com/admin
+  # After auth: approve subnet routes in the admin console
+  # ---------------------------------------------------------------------------
+  tailscale:
+    image: tailscale/tailscale:latest
+    container_name: tailscale
+    network_mode: host
+    volumes:
+      - ./VPN/tailscale:/var/lib/tailscale
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    environment:
+      - TZ=${TZ}
+      - TS_AUTHKEY=${TS_AUTHKEY}
+      - TS_HOSTNAME=${TS_HOSTNAME:-familypotter-nas}
+      - TS_EXTRA_ARGS=--advertise-routes=192.168.0.0/24 --accept-dns=false
+      - TS_STATE_DIR=/var/lib/tailscale
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # ddclient — Dynamic DNS
+  #
+  # Updates familypotter.ddns.net with the current WAN IP on Starlink.
+  # Note: Starlink residential = CGNAT (100.64.x.x). The DDNS record will
+  # reflect the CGNAT address — not internet-reachable until Priority plan.
+  # For remote access under CGNAT, use Tailscale above.
+  # ---------------------------------------------------------------------------
+  ddclient:
+    image: lscr.io/linuxserver/ddclient:latest
+    container_name: ddclient
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=${TZ}
+    volumes:
+      - ./DDNS:/config
+    restart: unless-stopped
