@@ -61,6 +61,13 @@ async def _run_migrations(conn) -> None:
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_adguard_queries_queried_at "
         "ON adguard_queries (queried_at) WHERE queried_at IS NOT NULL"
     ))
+    # TrackerDB enrichment columns (added in v1.1)
+    for col in ("tracker_name TEXT", "tracker_category TEXT", "tracker_org TEXT"):
+        col_name = col.split()[0]
+        await conn.execute(text(
+            f"ALTER TABLE adguard_queries ADD COLUMN IF NOT EXISTS {col}"
+        ))
+        logger.info("Migration: ensured column adguard_queries.%s", col_name)
 
 
 async def _seed_devices_if_empty(conn) -> None:
@@ -87,6 +94,9 @@ async def startup():
         await _run_migrations(conn)
         await _seed_devices_if_empty(conn)
     logger.info("DB tables verified and seeded.")
+
+    import tracker_lookup
+    tracker_lookup.preload()
 
     scan_sec = await load_scan_interval_sec()
     sched = build_scheduler(

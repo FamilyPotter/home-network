@@ -251,6 +251,7 @@ async def poll_adguard_queries() -> None:
 
     from models import AdguardQuery
     from sqlalchemy.dialects.postgresql import insert as pg_insert
+    import tracker_lookup
 
     rows: list[dict] = []
     now = datetime.now(timezone.utc)
@@ -264,6 +265,7 @@ async def poll_adguard_queries() -> None:
         elif isinstance(q, str):
             qname = q
 
+        tracker = tracker_lookup.lookup_domain(qname)
         rows.append({
             "fetched_at": now,
             "queried_at": _querylog_queried_at(entry),
@@ -272,6 +274,9 @@ async def poll_adguard_queries() -> None:
             "answer": _querylog_answer_text(entry),
             "status": entry.get("reason") or entry.get("status"),
             "elapsed_ms": _querylog_elapsed_ms(entry),
+            "tracker_name": tracker.name if tracker else None,
+            "tracker_category": tracker.category if tracker else None,
+            "tracker_org": tracker.org if tracker else None,
         })
 
     if not rows:

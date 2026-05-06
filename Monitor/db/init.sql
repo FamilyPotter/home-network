@@ -92,15 +92,18 @@ CREATE INDEX idx_history_changed ON device_history (changed_at DESC);
 -- ─── AdGuard Query Log Cache ─────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS adguard_queries (
-    id           BIGSERIAL   PRIMARY KEY,
-    fetched_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    queried_at   TIMESTAMPTZ,                        -- timestamp from AdGuard entry["time"]
-    client_ip    INET,
-    client_mac   MACADDR,
-    question     TEXT,
-    answer       TEXT,
-    status       TEXT,
-    elapsed_ms   INT
+    id               BIGSERIAL   PRIMARY KEY,
+    fetched_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    queried_at       TIMESTAMPTZ,                    -- timestamp from AdGuard entry["time"]
+    client_ip        INET,
+    client_mac       MACADDR,
+    question         TEXT,
+    answer           TEXT,
+    status           TEXT,
+    elapsed_ms       INT,
+    tracker_name     TEXT,                           -- e.g. "Google Analytics"
+    tracker_category TEXT,                           -- e.g. "site_analytics"
+    tracker_org      TEXT                            -- e.g. "Google"
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_adguard_queries_queried_at

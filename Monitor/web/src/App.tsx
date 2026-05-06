@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect, Component, ReactNode } from "react";
 import { Wifi, Server, AlertTriangle, Search, RefreshCw, Activity } from "lucide-react";
 import { Device, Stats, Alert as AlertType, AdguardStats } from "./types";
 import { usePolled, apiFetch } from "./hooks/useApi";
@@ -7,6 +7,32 @@ import { DeviceTable } from "./components/DeviceTable";
 import { DeviceDetail } from "./components/DeviceDetail";
 import { AlertBanner } from "./components/AlertBanner";
 import { TrafficChart } from "./components/TrafficChart";
+
+class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state = { error: null };
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-slate-900 border border-rose-700 rounded-2xl p-6 max-w-sm w-full text-center space-y-3">
+            <p className="text-rose-400 font-semibold">Something went wrong</p>
+            <p className="text-slate-400 text-xs font-mono break-all">
+              {(this.state.error as Error).message}
+            </p>
+            <button
+              className="mt-2 text-xs text-sky-400 hover:text-sky-300 underline"
+              onClick={() => this.setState({ error: null })}
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 type Tab = "devices" | "traffic" | "alerts";
 
@@ -210,7 +236,11 @@ export default function App() {
       </main>
 
       {/* Device detail modal */}
-      {selected && <DeviceDetail device={selected} onClose={() => setSelected(null)} />}
+      {selected && (
+        <ErrorBoundary>
+          <DeviceDetail device={selected} onClose={() => setSelected(null)} />
+        </ErrorBoundary>
+      )}
 
     </div>
   );

@@ -1,34 +1,76 @@
 import { useEffect, useState } from "react";
-import { X, Wifi, Cable, Server, Shield, Clock } from "lucide-react";
+import { X, Wifi, Cable, Shield } from "lucide-react";
 import { Device, AdguardStats } from "../types";
 import { apiFetch } from "../hooks/useApi";
 import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { CATEGORY_COLORS, CategoryBadge } from "./CategoryBadge";
 
 interface Props {
   device: Device;
   onClose: () => void;
 }
 
+/** Extract readable IP strings from an AdGuard answer field (may be array or string). */
+function formatAnswer(answer: unknown): string {
+  if (!answer) return "";
+  if (typeof answer === "string") {
+    // Already stringified JSON array from the DB — try to parse IPs out
+    try {
+      const parsed = JSON.parse(answer);
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map((a) => (typeof a === "object" && a !== null ? a.value ?? JSON.stringify(a) : String(a)))
+          .filter(Boolean)
+          .join(", ");
+      }
+    } catch {
+      // Not JSON — treat as plain string
+    }
+    return answer;
+  }
+  if (Array.isArray(answer)) {
+    return answer
+      .map((a) => (typeof a === "object" && a !== null ? (a as { value?: string }).value ?? JSON.stringify(a) : String(a)))
+      .filter(Boolean)
+      .join(", ");
+  }
+  return String(answer);
+}
+
+interface LiveEntry {
+  qhost?: string;
+  question?: { name?: string };
+  answer?: unknown;
+  reason?: string;
+  tracker_name?: string | null;
+  tracker_category?: string | null;
+  tracker_org?: string | null;
+}
+
 export function DeviceDetail({ device, onClose }: Props) {
   const [agStats, setAgStats] = useState<AdguardStats | null>(null);
-  const [queryLog, setQueryLog] = useState<Array<{ qhost?: string; question?: { name?: string }; answer?: string }>>([]);
+  const [queryLog, setQueryLog] = useState<LiveEntry[]>([]);
   const [agLoading, setAgLoading] = useState(true);
 
   useEffect(() => {
     apiFetch<AdguardStats>("/adguard/stats")
-      .then(d => { setAgStats(d); setAgLoading(false); })
+      .then((d) => { setAgStats(d); setAgLoading(false); })
       .catch(() => setAgLoading(false));
+
     if (device.ip) {
-      apiFetch<{ data?: Array<{ qhost?: string; question?: { name?: string }; answer?: string }> }>(
+      apiFetch<{ data?: LiveEntry[] }>(
         `/adguard/querylog/live?clientid=${encodeURIComponent(device.ip)}&limit=50`
       )
         .then((d) => setQueryLog(d.data ?? []))
         .catch(() => setQueryLog([]));
     }
-  }, [device.id]);
+  }, [device.id, device.ip]);
 
-  const clientStats = agStats?.top_clients?.find(c => c.name === device.ip);
-  const histData = (agStats?.processing_time_histogram ?? []).map((v, i) => ({ bin: i, count: v }));
+  const clientStats = agStats?.top_clients?.find((c) => c.name === device.ip);
+  const histogram = Array.isArray(agStats?.processing_time_histogram)
+    ? agStats!.processing_time_histogram
+    : [];
+  const histData = histogram.map((v, i) => ({ bin: i, count: typeof v === "number" ? v : 0 }));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
@@ -54,18 +96,18 @@ export function DeviceDetail({ device, onClose }: Props) {
 
           {/* Identity */}
           <div className="col-span-2 bg-slate-800/50 rounded-xl p-4 grid grid-cols-2 gap-3 text-sm">
-            <Field label="IP Address" value={device.ip ?? "—"} mono />
-            <Field label="MAC Address" value={device.mac} mono />
+            <Field label="IP Address"   value={device.ip ?? "—"} mono />
+            <Field label="MAC Address"  value={device.mac} mono />
             <Field label="Manufacturer" value={device.manufacturer ?? "—"} />
-            <Field label="Category" value={device.category ?? "—"} />
-            <Field label="Room" value={device.room ?? "—"} />
-            <Field label="Connection" value={device.connection ?? "—"}
+            <Field label="Category"     value={device.category ?? "—"} />
+            <Field label="Room"         value={device.room ?? "—"} />
+            <Field label="Connection"   value={device.connection ?? "—"}
               icon={device.connection === "Wired" ? <Cable size={14} /> : <Wifi size={14} />} />
             <Field label="IP Type"
               value={device.ip_type === "S" ? "Static (OS)" : device.ip_type === "R" ? "DHCP Reserved" : "Dynamic"} />
-            <Field label="Known" value={device.known ? "Yes" : "No"} />
-            <Field label="First Seen" value={fmt(device.first_seen)} />
-            <Field label="Last Seen" value={fmt(device.last_seen)} />
+            <Field label="Known"       value={device.known ? "Yes" : "No"} />
+            <Field label="First Seen"  value={fmt(device.first_seen)} />
+            <Field label="Last Seen"   value={fmt(device.last_seen)} />
             {device.description && (
               <div className="col-span-2 mt-1">
                 <p className="text-xs text-slate-500 mb-1">Description</p>
@@ -74,16 +116,18 @@ export function DeviceDetail({ device, onClose }: Props) {
             )}
           </div>
 
-          {/* AdGuard stats for this client */}
+          {/* AdGuard stats */}
           <div className="col-span-2 bg-slate-800/50 rounded-xl p-4">
             <h3 className="text-xs uppercase tracking-widest text-slate-500 mb-3 flex items-center gap-1.5">
-              <Shield size={12} /> AdGuard Query Stats (24h)
+              <Shield size={12} /> AdGuard Query Stats (24 h)
             </h3>
             {agLoading
               ? <p className="text-slate-600 text-sm">Loading…</p>
               : clientStats
-                ? <p className="text-slate-300 text-sm"><span className="font-bold text-sky-400">{clientStats.count.toLocaleString()}</span> DNS queries from this device</p>
-                : <p className="text-slate-600 text-sm">No recent queries found for {device.ip}.</p>
+                ? <p className="text-slate-300 text-sm">
+                    <span className="font-bold text-sky-400">{clientStats.count.toLocaleString()}</span> DNS queries from this device
+                  </p>
+                : <p className="text-slate-600 text-sm">No recent queries found for {device.ip ?? "this device"}.</p>
             }
             {!agLoading && histData.length > 0 && (
               <div className="mt-3 h-24">
@@ -101,18 +145,29 @@ export function DeviceDetail({ device, onClose }: Props) {
                 <p className="text-center text-xs text-slate-600 mt-1">DNS response time distribution (network-wide)</p>
               </div>
             )}
+
+            {/* Live query log */}
             <div className="mt-4">
-              <p className="text-xs text-slate-500 mb-2">Last 50 DNS queries for this device</p>
-              <div className="max-h-48 overflow-auto border border-slate-700 rounded-lg">
+              <p className="text-xs text-slate-500 mb-2">Last 50 DNS queries</p>
+              <div className="max-h-64 overflow-auto border border-slate-700 rounded-lg">
                 {queryLog.length === 0 ? (
                   <p className="text-slate-600 text-sm p-3">No recent per-device query log entries.</p>
                 ) : (
-                  queryLog.map((q, idx) => (
-                    <div key={idx} className="px-3 py-2 border-b border-slate-800 text-xs">
-                      <span className="text-slate-300">{q.question?.name ?? q.qhost ?? "unknown"}</span>
-                      {q.answer && <span className="text-slate-500"> → {q.answer}</span>}
-                    </div>
-                  ))
+                  queryLog.map((q, idx) => {
+                    const host = q.question?.name ?? q.qhost ?? "unknown";
+                    const ans = formatAnswer(q.answer);
+                    return (
+                      <div key={idx} className="px-3 py-2 border-b border-slate-800 text-xs flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <span className="text-slate-300 break-all">{host}</span>
+                          {ans && <span className="text-slate-500 ml-1">→ {ans}</span>}
+                        </div>
+                        {q.tracker_category && (
+                          <CategoryBadge category={q.tracker_category} name={q.tracker_name} />
+                        )}
+                      </div>
+                    );
+                  })
                 )}
               </div>
             </div>

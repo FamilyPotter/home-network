@@ -74,6 +74,9 @@ class AdguardQuery(Base):
     answer: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str | None] = mapped_column(Text)
     elapsed_ms: Mapped[int | None] = mapped_column(Integer)
+    tracker_name: Mapped[str | None] = mapped_column(Text)
+    tracker_category: Mapped[str | None] = mapped_column(Text)
+    tracker_org: Mapped[str | None] = mapped_column(Text)
 
 
 class Alert(Base):

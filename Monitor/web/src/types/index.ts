@@ -52,6 +52,20 @@ export interface AdguardStats {
   processing_time_histogram: number[];
 }
 
+export interface AdguardQuery {
+  id: number;
+  fetched_at: string;
+  queried_at: string | null;
+  client_ip: string | null;
+  question: string | null;
+  answer: string | null;
+  status: string | null;
+  elapsed_ms: number | null;
+  tracker_name: string | null;
+  tracker_category: string | null;
+  tracker_org: string | null;
+}
+
 export type SortKey = keyof Pick<
   Device,
   "hostname" | "ip" | "mac" | "manufacturer" | "category" | "room" |

@@ -103,6 +103,9 @@ class AdguardQueryOut(BaseModel):
     answer: str | None
     status: str | None
     elapsed_ms: int | None
+    tracker_name: str | None = None
+    tracker_category: str | None = None
+    tracker_org: str | None = None
 
 
 class StatsOut(BaseModel):
