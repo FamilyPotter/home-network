@@ -71,7 +71,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
-      - "8080:80"
+      - "8880:80"
     depends_on:
       - api
 
