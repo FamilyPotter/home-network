@@ -23,6 +23,11 @@ from models import Alert, Device, DeviceEvent, DeviceHistory, PresenceSnapshot, 
 logger = logging.getLogger("scanner")
 
 
+def _ip_str(ip) -> str | None:
+    """Coerce asyncpg IPv4Address/IPv6Address to plain string."""
+    return str(ip) if ip is not None else None
+
+
 def _arp_scan(cidr: str, timeout: int = 3) -> list[dict]:
     """Run a synchronous ARP scan and return [{ip, mac}, ...]."""
     pkt = Ether(dst="ff:ff:ff:ff:ff:ff") / ARP(pdst=cidr)
@@ -76,7 +81,7 @@ async def run_scan() -> None:
             if was_online != is_online:
                 d.online = is_online
                 d.last_seen = datetime.now(timezone.utc) if is_online else d.last_seen
-                db.add(DeviceHistory(device_id=d.id, scan_id=scan.id, ip=d.ip, online=is_online))
+                db.add(DeviceHistory(device_id=d.id, scan_id=scan.id, ip=_ip_str(d.ip), online=is_online))
                 db.add(
                     DeviceEvent(
                         device_id=d.id,
@@ -95,20 +100,20 @@ async def run_scan() -> None:
                         message=f"{d.hostname or d.mac} went offline",
                     ))
 
-            if is_online and found_by_mac[d.mac] != d.ip:
-                previous_ip = d.ip
+            if is_online and found_by_mac[d.mac] != _ip_str(d.ip):
+                previous_ip = _ip_str(d.ip)
                 db.add(Alert(
                     device_id=d.id,
                     alert_type="ip_change",
                     severity="info",
-                    message=f"{d.hostname or d.mac} IP changed {d.ip} → {found_by_mac[d.mac]}",
+                    message=f"{d.hostname or d.mac} IP changed {previous_ip} → {found_by_mac[d.mac]}",
                 ))
                 d.ip = found_by_mac[d.mac]
                 db.add(
                     DeviceEvent(
                         device_id=d.id,
                         event_type="ip_change",
-                        old_value=str(previous_ip) if previous_ip else None,
+                        old_value=previous_ip,
                         new_value=found_by_mac[d.mac],
                     )
                 )
@@ -118,7 +123,7 @@ async def run_scan() -> None:
             db.add(
                 PresenceSnapshot(
                     device_id=d.id,
-                    ip=found_by_mac.get(d.mac, d.ip),
+                    ip=found_by_mac.get(d.mac, _ip_str(d.ip)),
                     mac=d.mac,
                     alive=is_online,
                 )
