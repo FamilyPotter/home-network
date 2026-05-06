@@ -94,6 +94,7 @@ CREATE INDEX idx_history_changed ON device_history (changed_at DESC);
 CREATE TABLE IF NOT EXISTS adguard_queries (
     id           BIGSERIAL   PRIMARY KEY,
     fetched_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    queried_at   TIMESTAMPTZ,                        -- timestamp from AdGuard entry["time"]
     client_ip    INET,
     client_mac   MACADDR,
     question     TEXT,
@@ -102,6 +103,8 @@ CREATE TABLE IF NOT EXISTS adguard_queries (
     elapsed_ms   INT
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS uq_adguard_queries_queried_at
+    ON adguard_queries (queried_at) WHERE queried_at IS NOT NULL;
 CREATE INDEX idx_adguard_client  ON adguard_queries (client_ip, fetched_at DESC);
 CREATE INDEX idx_adguard_fetched ON adguard_queries (fetched_at DESC);
 
@@ -118,6 +121,14 @@ CREATE TABLE IF NOT EXISTS alerts (
 );
 
 CREATE INDEX idx_alerts_device ON alerts (device_id, created_at DESC);
+
+-- ─── Runtime settings (API-key/value) ────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS monitor_settings (
+    key        TEXT        PRIMARY KEY,
+    value      TEXT        NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 
 -- ─── Seed: known devices ──────────────────────────────────────────────────────
 

@@ -50,6 +50,7 @@ services:
       POSTGRES_HOST: 127.0.0.1
     volumes:
       - ./api:/app
+      - ./db:/app/db:ro
     depends_on:
       db:
         condition: service_healthy

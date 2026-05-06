@@ -5,6 +5,7 @@
 # Secrets — never commit these
 .env
 DDNS/ddclient.conf
+DHCP/ddclient/ddclient.conf
 
 # Tailscale state directory contains WireGuard private keys
 VPN/tailscale/

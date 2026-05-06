@@ -67,6 +67,7 @@ class AdguardQuery(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    queried_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, unique=True)
     client_ip: Mapped[str | None] = mapped_column(INET)
     client_mac: Mapped[str | None] = mapped_column(MACADDR)
     question: Mapped[str | None] = mapped_column(Text)
@@ -128,3 +129,11 @@ class TrafficSample(Base):
     dns_block_count: Mapped[int] = mapped_column(Integer, default=0)
 
     device: Mapped["Device | None"] = relationship("Device", back_populates="traffic_samples")
+
+
+class MonitorSetting(Base):
+    __tablename__ = "monitor_settings"
+
+    key: Mapped[str] = mapped_column(Text, primary_key=True)
+    value: Mapped[str] = mapped_column(Text, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)

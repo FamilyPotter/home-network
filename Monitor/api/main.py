@@ -1,16 +1,20 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 
 from config import settings
+from constants import KEY_POLL_INTERVAL, coerce_scan_interval
 from database import AsyncSessionLocal, engine
-from models import Alert, Base, Device, ScanEvent
+from models import Alert, Base, Device, MonitorSetting, ScanEvent
 from routers import adguard, alerts, devices, scans
+from routers.scan_interval import router as scan_interval_router
 from scheduler import build_scheduler
+from scheduler_state import get_scheduler, set_scheduler
 from schemas import StatsOut
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -33,27 +37,77 @@ app.include_router(devices.router)
 app.include_router(scans.router)
 app.include_router(alerts.router)
 app.include_router(adguard.router)
+app.include_router(scan_interval_router)
 
-scheduler = build_scheduler()
+
+async def load_scan_interval_sec() -> int:
+    async with AsyncSessionLocal() as db:
+        r = await db.execute(select(MonitorSetting).where(MonitorSetting.key == KEY_POLL_INTERVAL))
+        row = r.scalar_one_or_none()
+        if row:
+            try:
+                return coerce_scan_interval(int(row.value))
+            except ValueError:
+                pass
+    return coerce_scan_interval(settings.poll_interval_sec)
+
+
+async def _run_migrations(conn) -> None:
+    """Apply any schema changes that create_all cannot handle (new columns on existing tables)."""
+    await conn.execute(text(
+        "ALTER TABLE adguard_queries ADD COLUMN IF NOT EXISTS queried_at TIMESTAMPTZ"
+    ))
+    await conn.execute(text(
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_adguard_queries_queried_at "
+        "ON adguard_queries (queried_at) WHERE queried_at IS NOT NULL"
+    ))
+
+
+async def _seed_devices_if_empty(conn) -> None:
+    """Seed the device inventory from seed_inventory.sql if the devices table is empty."""
+    count = (await conn.execute(text("SELECT COUNT(*) FROM devices"))).scalar()
+    if count and count > 0:
+        return
+    seed_file = Path("/app/db/seed_inventory.sql")
+    if not seed_file.exists():
+        logger.warning("seed_inventory.sql not found at %s — devices table will be empty", seed_file)
+        return
+    sql = seed_file.read_text()
+    for stmt in sql.split(";"):
+        stmt = stmt.strip()
+        if stmt and not stmt.startswith("--"):
+            await conn.execute(text(stmt))
+    logger.info("Device inventory seeded from %s", seed_file)
 
 
 @app.on_event("startup")
 async def startup():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    logger.info("DB tables verified.")
+        await _run_migrations(conn)
+        await _seed_devices_if_empty(conn)
+    logger.info("DB tables verified and seeded.")
 
-    scheduler.start()
+    scan_sec = await load_scan_interval_sec()
+    sched = build_scheduler(
+        scan_interval_sec=scan_sec,
+        adguard_query_poll_sec=settings.adguard_query_poll_sec,
+    )
+    set_scheduler(sched)
+    sched.start()
     logger.info(
         "Scheduler started — scan/traffic every %ds; AdGuard query log DB sync every %ds",
-        settings.poll_interval_sec,
+        scan_sec,
         settings.adguard_query_poll_sec,
     )
 
 
 @app.on_event("shutdown")
 async def shutdown():
-    scheduler.shutdown(wait=False)
+    try:
+        get_scheduler().shutdown(wait=False)
+    except RuntimeError:
+        pass
 
 
 @app.get("/health")

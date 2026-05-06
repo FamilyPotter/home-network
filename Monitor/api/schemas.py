@@ -96,6 +96,7 @@ class AdguardQueryOut(BaseModel):
 
     id: int
     fetched_at: datetime
+    queried_at: datetime | None
     client_ip: str | None
     client_mac: str | None
     question: str | None

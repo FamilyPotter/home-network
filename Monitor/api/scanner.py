@@ -188,17 +188,42 @@ def _querylog_answer_text(entry: dict) -> str | None:
 
 
 def _querylog_elapsed_ms(entry: dict) -> int | None:
-    raw = entry.get("elapsedMs")
-    if raw is None:
+    # AdGuard ≥0.107 uses "elapsedMs" (numeric ms); older/newer may use "elapsed" ("0.123ms")
+    for key in ("elapsedMs", "elapsed"):
+        raw = entry.get(key)
+        if raw is None:
+            continue
+        try:
+            return int(float(str(raw).rstrip("ms").strip()))
+        except (TypeError, ValueError):
+            pass
+    return None
+
+
+def _querylog_queried_at(entry: dict) -> datetime | None:
+    raw = entry.get("time")
+    if not raw:
         return None
     try:
-        return int(float(str(raw)))
-    except (TypeError, ValueError):
+        return datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        return None
+
+
+def _safe_inet(value: str | None) -> str | None:
+    """Return value only if it looks like a valid IPv4/IPv6 address; else None."""
+    if not value:
+        return None
+    import ipaddress
+    try:
+        ipaddress.ip_address(value)
+        return value
+    except ValueError:
         return None
 
 
 async def poll_adguard_queries() -> None:
-    """Fetch recent AdGuard query log and persist to adguard_queries table."""
+    """Fetch recent AdGuard query log and persist new rows to adguard_queries."""
     url = f"{settings.adguard_url}/control/querylog"
     params = {"limit": 200, "response_status": "all"}
     try:
@@ -213,10 +238,18 @@ async def poll_adguard_queries() -> None:
         logger.warning("AdGuard query log fetch failed: %s", exc)
         return
 
-    from models import AdguardQuery
+    # AdGuard returns {"data": [...], "oldest": "..."} since v0.107
+    raw_entries = data.get("data") if isinstance(data, dict) else data
+    if not isinstance(raw_entries, list):
+        logger.warning("AdGuard query log: unexpected response shape: %s", type(data))
+        return
 
-    rows = []
-    for entry in data.get("data", []) or []:
+    from models import AdguardQuery
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    rows: list[dict] = []
+    now = datetime.now(timezone.utc)
+    for entry in raw_entries:
         if not isinstance(entry, dict):
             continue
         q = entry.get("question")
@@ -226,19 +259,33 @@ async def poll_adguard_queries() -> None:
         elif isinstance(q, str):
             qname = q
 
-        rows.append(AdguardQuery(
-            fetched_at=datetime.now(timezone.utc),
-            client_ip=entry.get("client"),
-            question=qname,
-            answer=_querylog_answer_text(entry),
-            status=entry.get("reason") or entry.get("status"),
-            elapsed_ms=_querylog_elapsed_ms(entry),
-        ))
+        rows.append({
+            "fetched_at": now,
+            "queried_at": _querylog_queried_at(entry),
+            "client_ip": _safe_inet(entry.get("client")),
+            "question": qname,
+            "answer": _querylog_answer_text(entry),
+            "status": entry.get("reason") or entry.get("status"),
+            "elapsed_ms": _querylog_elapsed_ms(entry),
+        })
 
-    if rows:
+    if not rows:
+        logger.debug("AdGuard query log: no entries returned")
+        return
+
+    try:
         async with AsyncSessionLocal() as db:
-            db.add_all(rows)
+            stmt = (
+                pg_insert(AdguardQuery.__table__)
+                .values(rows)
+                .on_conflict_do_nothing(index_elements=["queried_at"])
+            )
+            result = await db.execute(stmt)
             await db.commit()
-        logger.info("AdGuard query log: persisted %d rows into adguard_queries", len(rows))
-    else:
-        logger.debug("AdGuard query log: no rows returned")
+            inserted = result.rowcount if result.rowcount >= 0 else len(rows)
+            logger.info(
+                "AdGuard query log: %d fetched, %d new rows inserted into adguard_queries",
+                len(rows), inserted,
+            )
+    except Exception as exc:
+        logger.warning("AdGuard query log DB insert failed: %s", exc)

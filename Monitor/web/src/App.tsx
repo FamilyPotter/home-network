@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { Wifi, Server, AlertTriangle, Search, RefreshCw, Activity } from "lucide-react";
 import { Device, Stats, Alert as AlertType, AdguardStats } from "./types";
 import { usePolled, apiFetch } from "./hooks/useApi";
@@ -10,10 +10,33 @@ import { TrafficChart } from "./components/TrafficChart";
 
 type Tab = "devices" | "traffic" | "alerts";
 
+/** Must match Monitor API `ALLOWED_SCAN_INTERVAL_SEC`. */
+const SCAN_INTERVAL_OPTIONS: { label: string; seconds: number }[] = [
+  { label: "1 min", seconds: 60 },
+  { label: "3 min", seconds: 180 },
+  { label: "5 min", seconds: 300 },
+  { label: "15 min", seconds: 900 },
+  { label: "30 min", seconds: 1800 },
+  { label: "1 hr", seconds: 3600 },
+  { label: "3 hr", seconds: 10800 },
+  { label: "6 hr", seconds: 21600 },
+  { label: "12 hr", seconds: 43200 },
+];
+
 export default function App() {
   const [tab, setTab] = useState<Tab>("devices");
   const [selected, setSelected] = useState<Device | null>(null);
   const [scanning, setScanning] = useState(false);
+  const [scanIntervalSec, setScanIntervalSec] = useState<number>(300);
+  const [scanIntervalLoading, setScanIntervalLoading] = useState(true);
+  const [intervalSaving, setIntervalSaving] = useState(false);
+
+  useEffect(() => {
+    apiFetch<{ seconds: number }>("/settings/scan-interval")
+      .then((r) => setScanIntervalSec(r.seconds))
+      .catch(() => setScanIntervalSec(300))
+      .finally(() => setScanIntervalLoading(false));
+  }, []);
 
   const { data: devices, loading: devLoading, refetch: refetchDevices } = usePolled<Device[]>("/devices/?limit=500", 15_000);
   const { data: stats, refetch: refetchStats } = usePolled<Stats>("/stats", 15_000);
@@ -41,6 +64,25 @@ export default function App() {
     } catch { setScanning(false); }
   }, [refetchDevices, refetchStats]);
 
+  const onScanIntervalChange = useCallback(
+    async (e: React.ChangeEvent<HTMLSelectElement>) => {
+      const sec = Number(e.target.value);
+      setIntervalSaving(true);
+      try {
+        const r = await apiFetch<{ seconds: number }>("/settings/scan-interval", {
+          method: "PUT",
+          body: JSON.stringify({ seconds: sec }),
+        });
+        setScanIntervalSec(r.seconds);
+      } catch {
+        /* keep previous value */
+      } finally {
+        setIntervalSaving(false);
+      }
+    },
+    [],
+  );
+
   const lastScan = stats?.last_scan
     ? new Date(stats.last_scan).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
     : "—";
@@ -59,8 +101,24 @@ export default function App() {
             <p className="text-xs text-slate-500">Calgary House · 192.168.0.0/24</p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap justify-end">
           <span className="text-xs text-slate-600">Last scan: {lastScan}</span>
+          <label className="flex items-center gap-1.5 text-xs text-slate-500">
+            <span className="hidden sm:inline">Auto</span>
+            <select
+              value={scanIntervalSec}
+              onChange={onScanIntervalChange}
+              disabled={scanIntervalLoading || intervalSaving}
+              className="bg-slate-800 border border-slate-700 text-slate-200 rounded-lg px-2 py-1.5 min-w-[6.5rem] disabled:opacity-50 cursor-pointer disabled:cursor-wait"
+              aria-label="Automatic scan interval"
+            >
+              {SCAN_INTERVAL_OPTIONS.map((o) => (
+                <option key={o.seconds} value={o.seconds}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
           <button
             onClick={triggerScan}
             disabled={scanning}
