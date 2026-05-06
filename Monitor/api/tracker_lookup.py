@@ -7,6 +7,7 @@ The SQLite dump is downloaded once and cached for the container lifetime.
 from __future__ import annotations
 
 import logging
+import re
 import sqlite3
 from pathlib import Path
 from typing import NamedTuple
@@ -59,10 +60,35 @@ def preload() -> None:
     try:
         _ensure_sqlite()
         _build_lookup()
+        if not _lookup:
+            # Cache may have been written before unistr fix — wipe and retry once
+            logger.warning("TrackerDB loaded 0 entries; wiping cache and retrying…")
+            CACHE_PATH.unlink(missing_ok=True)
+            _ensure_sqlite()
+            _build_lookup()
         _enabled = True
         logger.info("TrackerDB loaded — %d domain entries", len(_lookup))
     except Exception as exc:
         logger.warning("TrackerDB unavailable; tracker enrichment disabled: %s", exc)
+
+
+def _unistr(s: str | None) -> str | None:
+    """Python shim for SQLite's unistr() added in 3.42 — decodes \\uXXXX escapes."""
+    if not s:
+        return s
+    return re.sub(r"\\u([0-9a-fA-F]{4})", lambda m: chr(int(m.group(1), 16)), s)
+
+
+def _open_rw() -> sqlite3.Connection:
+    conn = sqlite3.connect(str(CACHE_PATH))
+    conn.create_function("unistr", 1, _unistr)
+    return conn
+
+
+def _open_ro() -> sqlite3.Connection:
+    conn = sqlite3.connect(f"file:{CACHE_PATH}?mode=ro", uri=True)
+    conn.create_function("unistr", 1, _unistr)
+    return conn
 
 
 def _ensure_sqlite() -> None:
@@ -75,7 +101,7 @@ def _ensure_sqlite() -> None:
     resp = httpx.get(TRACKERDB_URL, timeout=90, follow_redirects=True)
     resp.raise_for_status()
 
-    conn = sqlite3.connect(str(CACHE_PATH))
+    conn = _open_rw()
     try:
         conn.executescript(resp.text)
         conn.commit()
@@ -86,7 +112,7 @@ def _ensure_sqlite() -> None:
 
 def _build_lookup() -> None:
     """Populate _lookup dict from SQLite. Handles both whotracks.me and ghostery/trackerdb schemas."""
-    conn = sqlite3.connect(f"file:{CACHE_PATH}?mode=ro", uri=True)
+    conn = _open_ro()
     rows = []
     try:
         # Preferred: whotracks.me schema
