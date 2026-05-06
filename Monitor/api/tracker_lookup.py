@@ -60,12 +60,6 @@ def preload() -> None:
     try:
         _ensure_sqlite()
         _build_lookup()
-        if not _lookup:
-            # Cache may have been written before unistr fix — wipe and retry once
-            logger.warning("TrackerDB loaded 0 entries; wiping cache and retrying…")
-            CACHE_PATH.unlink(missing_ok=True)
-            _ensure_sqlite()
-            _build_lookup()
         _enabled = True
         logger.info("TrackerDB loaded — %d domain entries", len(_lookup))
     except Exception as exc:
@@ -115,29 +109,16 @@ def _build_lookup() -> None:
     conn = _open_ro()
     rows = []
     try:
-        # Preferred: whotracks.me schema
-        # tracker_domains(tracker→int, domain), trackers(id,name,category,company), categories, companies
-        try:
-            rows = conn.execute("""
-                SELECT td.domain, t.name, c.name, COALESCE(co.name, '')
-                FROM   tracker_domains td
-                JOIN   trackers   t  ON t.id  = td.tracker
-                JOIN   categories c  ON c.id  = t.category
-                LEFT JOIN companies co ON co.id = t.company
-            """).fetchall()
-        except sqlite3.OperationalError:
-            pass
-
-        # Fallback: ghostery/trackerdb schema
-        # tracker_domains(pattern→key, domain), patterns(key,name,category,organization)
-        if not rows:
-            rows = conn.execute("""
-                SELECT td.domain, p.name, c.name, COALESCE(o.name, '')
-                FROM   tracker_domains td
-                JOIN   patterns       p ON p.key = td.pattern
-                JOIN   categories     c ON c.key = p.category
-                LEFT JOIN organizations o ON o.id = p.organization
-            """).fetchall()
+        # whotracks.me / ghostery trackerdb schema:
+        # tracker_domains(tracker TEXT, domain), trackers(id TEXT, name, category_id, company_id),
+        # categories(id, name), companies(id, name)
+        rows = conn.execute("""
+            SELECT td.domain, t.name, c.name, COALESCE(co.name, '')
+            FROM   tracker_domains td
+            JOIN   trackers   t  ON t.id         = td.tracker
+            JOIN   categories c  ON c.id         = t.category_id
+            LEFT JOIN companies co ON co.id      = t.company_id
+        """).fetchall()
     finally:
         conn.close()
 
