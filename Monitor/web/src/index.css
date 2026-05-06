@@ -1,0 +1,15 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  .badge {
+    @apply inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-medium;
+  }
+  .badge-blue    { @apply bg-blue-500/20 text-blue-300; }
+  .badge-emerald { @apply bg-emerald-500/20 text-emerald-300; }
+  .badge-slate   { @apply bg-slate-600/40 text-slate-400; }
+  .badge-indigo  { @apply bg-indigo-500/20 text-indigo-300; }
+  .badge-teal    { @apply bg-teal-500/20 text-teal-300; }
+  .badge-purple  { @apply bg-purple-500/20 text-purple-300; }
+}

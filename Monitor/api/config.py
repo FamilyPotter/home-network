@@ -1,0 +1,28 @@
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    postgres_user: str = "netmonitor"
+    postgres_password: str = "NM_Chester123"
+    postgres_db: str = "netmonitor"
+    postgres_host: str = "db"
+    postgres_port: int = 5432
+
+    adguard_url: str = "http://192.168.0.150:3000"
+    adguard_user: str = "admin"
+    adguard_password: str = ""
+
+    poll_interval_sec: int = 120
+    network_cidr: str = "192.168.0.0/24"
+
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    @property
+    def db_url(self) -> str:
+        return (
+            f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}"
+            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+        )
+
+
+settings = Settings()

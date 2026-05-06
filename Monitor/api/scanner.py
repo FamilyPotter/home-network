@@ -1,0 +1,163 @@
+"""
+ARP-based network scanner using scapy.
+Runs as a background task via APScheduler.
+"""
+from __future__ import annotations
+
+import asyncio
+import logging
+import time
+from datetime import datetime, timezone
+
+import httpx
+from scapy.layers.l2 import ARP, Ether
+from scapy.sendrecv import srp
+from sqlalchemy import select, update
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from config import settings
+from database import AsyncSessionLocal
+from models import Alert, Device, DeviceHistory, ScanEvent
+
+logger = logging.getLogger("scanner")
+
+
+def _arp_scan(cidr: str, timeout: int = 3) -> list[dict]:
+    """Run a synchronous ARP scan and return [{ip, mac}, ...]."""
+    pkt = Ether(dst="ff:ff:ff:ff:ff:ff") / ARP(pdst=cidr)
+    ans, _ = srp(pkt, timeout=timeout, verbose=False, iface_hint=cidr.split("/")[0])
+    return [{"ip": rcv.psrc, "mac": rcv.hwsrc.lower()} for _, rcv in ans]
+
+
+async def run_scan() -> None:
+    """Full scan cycle: ARP → update devices → persist history → raise alerts."""
+    start = time.monotonic()
+    logger.info("Scan starting for %s", settings.network_cidr)
+
+    loop = asyncio.get_event_loop()
+    try:
+        found: list[dict] = await loop.run_in_executor(
+            None, _arp_scan, settings.network_cidr
+        )
+    except Exception as exc:
+        logger.error("ARP scan failed: %s", exc)
+        return
+
+    elapsed_ms = int((time.monotonic() - start) * 1000)
+    found_macs = {r["mac"] for r in found}
+    found_by_mac = {r["mac"]: r["ip"] for r in found}
+
+    async with AsyncSessionLocal() as db:
+        scan = ScanEvent(
+            scanned_at=datetime.now(timezone.utc),
+            duration_ms=elapsed_ms,
+            total_hosts=len(found),
+        )
+        db.add(scan)
+        await db.flush()
+
+        all_devices: list[Device] = (await db.execute(select(Device))).scalars().all()
+        known_macs = {d.mac: d for d in all_devices}
+
+        new_count = 0
+        lost_count = 0
+
+        # Mark devices online/offline and track changes
+        for d in all_devices:
+            was_online = d.online
+            is_online = d.mac in found_macs
+
+            if was_online != is_online:
+                d.online = is_online
+                d.last_seen = datetime.now(timezone.utc) if is_online else d.last_seen
+                db.add(DeviceHistory(device_id=d.id, scan_id=scan.id, ip=d.ip, online=is_online))
+
+                if not is_online:
+                    lost_count += 1
+                    db.add(Alert(
+                        device_id=d.id,
+                        alert_type="offline",
+                        severity="warning",
+                        message=f"{d.hostname or d.mac} went offline",
+                    ))
+
+            if is_online and found_by_mac[d.mac] != d.ip:
+                db.add(Alert(
+                    device_id=d.id,
+                    alert_type="ip_change",
+                    severity="info",
+                    message=f"{d.hostname or d.mac} IP changed {d.ip} → {found_by_mac[d.mac]}",
+                ))
+                d.ip = found_by_mac[d.mac]
+
+            if is_online:
+                d.last_seen = datetime.now(timezone.utc)
+
+        # Register new devices
+        for mac, ip in found_by_mac.items():
+            if mac not in known_macs:
+                new_d = Device(
+                    mac=mac,
+                    ip=ip,
+                    online=True,
+                    known=False,
+                    first_seen=datetime.now(timezone.utc),
+                    last_seen=datetime.now(timezone.utc),
+                )
+                db.add(new_d)
+                await db.flush()
+                db.add(DeviceHistory(device_id=new_d.id, scan_id=scan.id, ip=ip, online=True))
+                db.add(Alert(
+                    device_id=new_d.id,
+                    alert_type="new_device",
+                    severity="info",
+                    message=f"New device discovered: {mac} ({ip})",
+                ))
+                new_count += 1
+
+        scan.new_devices = new_count
+        scan.lost_devices = lost_count
+
+        await db.commit()
+
+    logger.info(
+        "Scan done in %dms — %d hosts, %d new, %d lost",
+        elapsed_ms, len(found), new_count, lost_count,
+    )
+
+
+# ─── AdGuard query log poller ──────────────────────────────────────────────────
+
+async def poll_adguard_queries() -> None:
+    """Fetch recent AdGuard query log and persist to adguard_queries table."""
+    url = f"{settings.adguard_url}/control/querylog"
+    params = {"limit": 200, "response_status": "all"}
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                url, params=params,
+                auth=(settings.adguard_user, settings.adguard_password),
+            )
+            resp.raise_for_status()
+            data = resp.json()
+    except Exception as exc:
+        logger.warning("AdGuard query log fetch failed: %s", exc)
+        return
+
+    from models import AdguardQuery
+    rows = []
+    for entry in data.get("data", []):
+        rows.append(AdguardQuery(
+            fetched_at=datetime.now(timezone.utc),
+            client_ip=entry.get("client"),
+            question=entry.get("question", {}).get("name"),
+            answer=entry.get("answer"),
+            status=entry.get("reason"),
+            elapsed_ms=entry.get("elapsedMs"),
+        ))
+
+    if rows:
+        async with AsyncSessionLocal() as db:
+            db.add_all(rows)
+            await db.commit()
+    logger.debug("AdGuard: persisted %d query log entries", len(rows))
