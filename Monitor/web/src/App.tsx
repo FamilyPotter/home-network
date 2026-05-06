@@ -1,6 +1,6 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { Wifi, Server, AlertTriangle, Search, RefreshCw, Activity } from "lucide-react";
-import { Device, Stats, Alert as AlertType } from "./types";
+import { Device, Stats, Alert as AlertType, AdguardStats } from "./types";
 import { usePolled, apiFetch } from "./hooks/useApi";
 import { StatCard } from "./components/StatCard";
 import { DeviceTable } from "./components/DeviceTable";
@@ -18,6 +18,20 @@ export default function App() {
   const { data: devices, loading: devLoading, refetch: refetchDevices } = usePolled<Device[]>("/devices/?limit=500", 15_000);
   const { data: stats, refetch: refetchStats } = usePolled<Stats>("/stats", 15_000);
   const { data: alerts, refetch: refetchAlerts } = usePolled<AlertType[]>("/alerts/?limit=200", 10_000);
+  const {
+    data: agStats,
+    loading: agLoading,
+    error: agError,
+    refetch: refetchAg,
+  } = usePolled<AdguardStats>("/adguard/stats", 60_000);
+
+  const dnsByIp = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const c of agStats?.top_clients ?? []) {
+      if (c?.name != null) m[String(c.name)] = Number(c.count) || 0;
+    }
+    return m;
+  }, [agStats]);
 
   const triggerScan = useCallback(async () => {
     setScanning(true);
@@ -101,10 +115,23 @@ export default function App() {
         {tab === "devices" && (
           devLoading
             ? <p className="text-slate-600 text-center py-20">Loading devices…</p>
-            : <DeviceTable devices={devices ?? []} onSelect={setSelected} />
+            : <DeviceTable
+                devices={devices ?? []}
+                dnsByIp={dnsByIp}
+                dnsLoading={agLoading}
+                dnsError={agError}
+                onSelect={setSelected}
+              />
         )}
 
-        {tab === "traffic" && <TrafficChart />}
+        {tab === "traffic" && (
+          <TrafficChart
+            stats={agStats}
+            loading={agLoading}
+            error={agError}
+            onRetry={refetchAg}
+          />
+        )}
 
         {tab === "alerts" && (
           <div className="space-y-2">

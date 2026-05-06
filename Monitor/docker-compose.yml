@@ -63,6 +63,8 @@ services:
     build:
       context: ./web
       dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ""
     container_name: netmonitor-web
     restart: unless-stopped
     extra_hosts:
@@ -71,8 +73,6 @@ services:
       - "8080:80"
     depends_on:
       - api
-    environment:
-      - VITE_API_URL=http://192.168.0.150:8000
 
 volumes:
   pgdata:

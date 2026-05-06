@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from adguard_normalize import client_query_totals_from_stats, normalize_adguard_stats
 from config import settings
 from database import get_db
 from models import AdguardQuery
@@ -27,9 +28,21 @@ async def _ag_get(path: str, params: dict | None = None) -> dict:
 
 @router.get("/stats")
 async def adguard_stats():
-    """Return AdGuard Home global stats (dns_queries, blocked_filtering, etc.)."""
+    """Return AdGuard Home global stats; normalizes top_clients/top_blocked to {name,count} rows."""
     try:
-        return await _ag_get("/control/stats")
+        raw = await _ag_get("/control/stats")
+        return normalize_adguard_stats(raw)
+    except Exception as exc:
+        raise HTTPException(502, f"AdGuard unreachable: {exc}")
+
+
+@router.get("/client_dns_totals")
+async def client_dns_totals():
+    """Per-client DNS query totals (from AdGuard stats top_clients), keyed by client IP or label."""
+    try:
+        raw = await _ag_get("/control/stats")
+        norm = normalize_adguard_stats(raw)
+        return {"totals": client_query_totals_from_stats(norm)}
     except Exception as exc:
         raise HTTPException(502, f"AdGuard unreachable: {exc}")
 

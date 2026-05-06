@@ -39,6 +39,12 @@ docker compose logs -f api
 
 Once running: http://192.168.0.150:8000/docs
 
+## Web UI API calls
+
+Production builds use **same-origin** requests to `/api/...` (nginx proxies to the FastAPI container host). Rebuild the **web** image after changing API URLs.
+
+The **DNS** column matches devices by **IP** to AdGuard’s **top clients** list (statistics interval configured in AdGuard). LAN bandwidth per device is not available without extra tooling.
+
 ## Scanner
 
 The FastAPI service runs an ARP scan every 120 seconds (configurable via `POLL_INTERVAL_SEC` in `.env`).

@@ -56,6 +56,6 @@ export type SortKey = keyof Pick<
   Device,
   "hostname" | "ip" | "mac" | "manufacturer" | "category" | "room" |
   "connection" | "ip_type" | "online" | "known" | "first_seen" | "last_seen" | "description"
-> | "status";
+> | "status" | "dns_queries";
 
 export type SortDir = "asc" | "desc";

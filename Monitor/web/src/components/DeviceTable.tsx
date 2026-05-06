@@ -4,11 +4,16 @@ import { Device, SortDir, SortKey } from "../types";
 
 interface Props {
   devices: Device[];
+  /** Client IP (or AdGuard client label) → DNS query count from AdGuard stats */
+  dnsByIp: Record<string, number>;
+  dnsLoading?: boolean;
+  dnsError?: string | null;
   onSelect: (d: Device) => void;
 }
 
 const COLUMNS: { key: SortKey; label: string }[] = [
   { key: "status",       label: "Status"       },
+  { key: "dns_queries",  label: "DNS"          },
   { key: "hostname",     label: "Hostname"      },
   { key: "ip",           label: "IP"            },
   { key: "mac",          label: "MAC"           },
@@ -33,7 +38,23 @@ function ipSortKey(ip: string | null) {
   return ip.split(".").reduce((acc, n) => acc * 256 + Number(n), 0);
 }
 
-export function DeviceTable({ devices, onSelect }: Props) {
+function dnsCount(ip: string | null, dnsByIp: Record<string, number>): number {
+  if (!ip) return 0;
+  const v = dnsByIp[ip];
+  return typeof v === "number" ? v : 0;
+}
+
+/** Traffic intensity vs peers for colour dot (DNS-only; LAN throughput not available here). */
+function dnsHeatDotClass(count: number, maxAmongPeers: number): string {
+  if (count <= 0) return "bg-slate-600";
+  const r = maxAmongPeers > 0 ? count / maxAmongPeers : 0;
+  if (r < 0.12) return "bg-slate-500";
+  if (r < 0.35) return "bg-sky-400 shadow-[0_0_6px_#38bdf8]";
+  if (r < 0.65) return "bg-amber-400 shadow-[0_0_6px_#fbbf24]";
+  return "bg-rose-400 shadow-[0_0_8px_#fb7185]";
+}
+
+export function DeviceTable({ devices, dnsByIp, dnsLoading, dnsError, onSelect }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>("status");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [search, setSearch] = useState("");
@@ -42,6 +63,14 @@ export function DeviceTable({ devices, onSelect }: Props) {
 
   const rooms = useMemo(() => [...new Set(devices.map(d => d.room).filter(Boolean))].sort(), [devices]);
   const cats  = useMemo(() => [...new Set(devices.map(d => d.category).filter(Boolean))].sort(), [devices]);
+  const maxDnsInTable = useMemo(() => {
+    let m = 1;
+    for (const d of devices) {
+      const c = dnsCount(d.ip, dnsByIp);
+      if (c > m) m = c;
+    }
+    return m;
+  }, [devices, dnsByIp]);
 
   const sorted = useMemo(() => {
     let d = [...devices];
@@ -61,6 +90,9 @@ export function DeviceTable({ devices, onSelect }: Props) {
       if (sortKey === "status") {
         va = a.online ? 1 : 0;
         vb = b.online ? 1 : 0;
+      } else if (sortKey === "dns_queries") {
+        va = dnsCount(a.ip, dnsByIp);
+        vb = dnsCount(b.ip, dnsByIp);
       } else if (sortKey === "ip") {
         va = ipSortKey(a.ip);
         vb = ipSortKey(b.ip);
@@ -76,7 +108,7 @@ export function DeviceTable({ devices, onSelect }: Props) {
       return sortDir === "asc" ? cmp : -cmp;
     });
     return d;
-  }, [devices, search, filterRoom, filterCat, sortKey, sortDir]);
+  }, [devices, search, filterRoom, filterCat, sortKey, sortDir, dnsByIp]);
 
   function toggle(key: SortKey) {
     if (key === sortKey) setSortDir(d => d === "asc" ? "desc" : "asc");
@@ -131,6 +163,7 @@ export function DeviceTable({ devices, onSelect }: Props) {
                 <th
                   key={col.key}
                   onClick={() => toggle(col.key)}
+                  title={col.key === "dns_queries" ? "DNS queries (AdGuard statistics window). LAN Mbps not tracked." : undefined}
                   className="px-3 py-3 text-left cursor-pointer select-none hover:text-sky-400 whitespace-nowrap"
                 >
                   {col.label}{arrow(col.key)}
@@ -154,6 +187,25 @@ export function DeviceTable({ devices, onSelect }: Props) {
                     "inline-block w-2 h-2 rounded-full",
                     d.online ? "bg-emerald-400 shadow-[0_0_6px_#34d399]" : "bg-slate-600",
                   )} />
+                </td>
+                <td className="px-3 py-2">
+                  {dnsError ? (
+                    <span className="text-slate-600 text-xs" title={dnsError}>—</span>
+                  ) : dnsLoading && Object.keys(dnsByIp).length === 0 ? (
+                    <span className="text-slate-600 text-xs">…</span>
+                  ) : (
+                    <span className="flex items-center gap-2 min-w-[4.5rem]" title={`DNS queries from AdGuard for ${d.ip ?? "unknown IP"}`}>
+                      <span
+                        className={clsx(
+                          "inline-block w-2 h-2 rounded-full shrink-0",
+                          dnsHeatDotClass(dnsCount(d.ip, dnsByIp), maxDnsInTable),
+                        )}
+                      />
+                      <span className="font-mono tabular-nums text-xs text-slate-300">
+                        {d.ip ? (dnsCount(d.ip, dnsByIp)).toLocaleString() : "—"}
+                      </span>
+                    </span>
+                  )}
                 </td>
                 <td className="px-3 py-2 font-medium text-slate-100 whitespace-nowrap">
                   {d.hostname ?? <span className="text-slate-500 italic">Unknown</span>}

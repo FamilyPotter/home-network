@@ -1,9 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 
-const BASE = import.meta.env.VITE_API_URL ?? "http://192.168.0.150:8000";
+/** Empty VITE_API_URL → same-origin `/api/...` (nginx proxies to FastAPI). Set VITE_API_URL for dev against remote API. */
+function apiUrl(path: string): string {
+  const p = path.startsWith("/") ? path : `/${path}`;
+  const raw = import.meta.env.VITE_API_URL;
+  if (raw != null && String(raw).trim() !== "") {
+    return `${String(raw).replace(/\/$/, "")}${p}`;
+  }
+  return `/api${p}`;
+}
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await fetch(apiUrl(path), {
     headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
     ...init,
   });
