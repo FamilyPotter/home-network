@@ -288,7 +288,7 @@ async def poll_adguard_queries() -> None:
             stmt = (
                 pg_insert(AdguardQuery.__table__)
                 .values(rows)
-                .on_conflict_do_nothing(index_elements=["queried_at"])
+                .on_conflict_do_nothing()  # matches partial unique index on queried_at WHERE NOT NULL
             )
             result = await db.execute(stmt)
             await db.commit()
