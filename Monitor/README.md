@@ -8,15 +8,15 @@ running in Docker containers on the QNAP NAS.
 | Service | Image | Port |
 |---|---|---|
 | PostgreSQL 16 | postgres:16-alpine | 5432 |
-| pgAdmin 4 | dpage/pgadmin4 | **5050** |
-| FastAPI API | ./api | **8000** |
-| React UI (nginx) | ./web | **8080** |
+| pgAdmin 4 | dpage/pgadmin4 | **25050** (host; see `docker-compose.yml`) |
+| FastAPI API | ./api | **8000** (uses **host network** on Linux so ARP reaches the LAN) |
+| React UI (nginx) | ./web | **8080** — on QNAP, if **8080** is busy, map **8880:80** instead |
 
 ## pgAdmin Login
 
 | Field | Value |
 |---|---|
-| URL | http://192.168.0.150:5050 |
+| URL | http://192.168.0.150:25050 |
 | Email | `admin@familypotter.local` |
 | Password | `Chester123!pg` |
 
@@ -42,7 +42,11 @@ Once running: http://192.168.0.150:8000/docs
 ## Scanner
 
 The FastAPI service runs an ARP scan every 120 seconds (configurable via `POLL_INTERVAL_SEC` in `.env`).
-It also polls the AdGuard Home query log every 5 minutes.
+The **API container uses `network_mode: host`** so ARP broadcasts reach your LAN; with a normal bridge-only API, **Scan Now finds 0 devices**.
+
+If you still see zero hosts on some QNAP models, set **`SCAN_IFACE`** in `.env` to the LAN interface (examples: `bond0`, `eth0`, `ovs_eth0`), then recreate the API container.
+
+It also polls AdGuard Home for traffic samples on the same interval.
 
 ## Credentials
 

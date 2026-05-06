@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 class DeviceBase(BaseModel):
@@ -42,6 +42,16 @@ class DeviceOut(DeviceBase):
     first_seen: datetime
     last_seen: datetime
 
+    @field_validator("ip", mode="before")
+    @classmethod
+    def _ip_str(cls, v):  # asyncpg / INET returns IPv4Address-like objects
+        return str(v) if v is not None else None
+
+    @field_validator("mac", mode="before")
+    @classmethod
+    def _mac_str(cls, v):
+        return str(v) if v is not None else None
+
 
 class ScanEventOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -60,6 +70,11 @@ class DeviceHistoryOut(BaseModel):
     id: int
     device_id: uuid.UUID
     ip: str | None
+
+    @field_validator("ip", mode="before")
+    @classmethod
+    def _hist_ip_str(cls, v):
+        return str(v) if v is not None else None
     online: bool
     changed_at: datetime
 

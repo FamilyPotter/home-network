@@ -11,7 +11,6 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     ports:
       - "5432:5432"
     healthcheck:
@@ -33,7 +32,7 @@ services:
       - pgadmin_data:/var/lib/pgadmin
       - ./db/pgadmin-servers.json:/pgadmin4/servers.json:ro
     ports:
-      - "5050:80"
+      - "25050:80"
     depends_on:
       db:
         condition: service_healthy
@@ -44,8 +43,11 @@ services:
       dockerfile: Dockerfile
     container_name: netmonitor-api
     restart: unless-stopped
-    env_file: .env
+    # Required for LAN ARP: bridge network sees 0 hosts. Host uses published PostgreSQL :5432.
     network_mode: host
+    env_file: .env
+    environment:
+      POSTGRES_HOST: 127.0.0.1
     volumes:
       - ./api:/app
     depends_on:
@@ -63,6 +65,8 @@ services:
       dockerfile: Dockerfile
     container_name: netmonitor-web
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "8080:80"
     depends_on:

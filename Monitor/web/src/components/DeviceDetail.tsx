@@ -11,12 +11,20 @@ interface Props {
 
 export function DeviceDetail({ device, onClose }: Props) {
   const [agStats, setAgStats] = useState<AdguardStats | null>(null);
+  const [queryLog, setQueryLog] = useState<Array<{ qhost?: string; question?: { name?: string }; answer?: string }>>([]);
   const [agLoading, setAgLoading] = useState(true);
 
   useEffect(() => {
     apiFetch<AdguardStats>("/adguard/stats")
       .then(d => { setAgStats(d); setAgLoading(false); })
       .catch(() => setAgLoading(false));
+    if (device.ip) {
+      apiFetch<{ data?: Array<{ qhost?: string; question?: { name?: string }; answer?: string }> }>(
+        `/adguard/querylog/live?clientid=${encodeURIComponent(device.ip)}&limit=50`
+      )
+        .then((d) => setQueryLog(d.data ?? []))
+        .catch(() => setQueryLog([]));
+    }
   }, [device.id]);
 
   const clientStats = agStats?.top_clients?.find(c => c.name === device.ip);
@@ -93,6 +101,21 @@ export function DeviceDetail({ device, onClose }: Props) {
                 <p className="text-center text-xs text-slate-600 mt-1">DNS response time distribution (network-wide)</p>
               </div>
             )}
+            <div className="mt-4">
+              <p className="text-xs text-slate-500 mb-2">Last 50 DNS queries for this device</p>
+              <div className="max-h-48 overflow-auto border border-slate-700 rounded-lg">
+                {queryLog.length === 0 ? (
+                  <p className="text-slate-600 text-sm p-3">No recent per-device query log entries.</p>
+                ) : (
+                  queryLog.map((q, idx) => (
+                    <div key={idx} className="px-3 py-2 border-b border-slate-800 text-xs">
+                      <span className="text-slate-300">{q.question?.name ?? q.qhost ?? "unknown"}</span>
+                      {q.answer && <span className="text-slate-500"> → {q.answer}</span>}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
           </div>
 
         </div>

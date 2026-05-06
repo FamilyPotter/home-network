@@ -2,16 +2,15 @@ from __future__ import annotations
 
 import logging
 
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select
 
 from config import settings
 from database import AsyncSessionLocal, engine
 from models import Alert, Base, Device, ScanEvent
 from routers import adguard, alerts, devices, scans
-from scanner import poll_adguard_queries, run_scan
+from scheduler import build_scheduler
 from schemas import StatsOut
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -35,7 +34,7 @@ app.include_router(scans.router)
 app.include_router(alerts.router)
 app.include_router(adguard.router)
 
-scheduler = AsyncIOScheduler(timezone="Europe/London")
+scheduler = build_scheduler()
 
 
 @app.on_event("startup")
@@ -44,11 +43,9 @@ async def startup():
         await conn.run_sync(Base.metadata.create_all)
     logger.info("DB tables verified.")
 
-    scheduler.add_job(run_scan, "interval", seconds=settings.poll_interval_sec, id="arp_scan")
-    scheduler.add_job(poll_adguard_queries, "interval", seconds=300, id="adguard_poll")
     scheduler.start()
     logger.info(
-        "Scheduler started — ARP scan every %ds, AdGuard poll every 300s",
+        "Scheduler started — ARP and AdGuard polling every %ds",
         settings.poll_interval_sec,
     )
 

@@ -18,6 +18,7 @@ const COLUMNS: { key: SortKey; label: string }[] = [
   { key: "connection",   label: "Connection"    },
   { key: "ip_type",      label: "IP Type"       },
   { key: "known",        label: "Known"         },
+  { key: "description",  label: "Description"   },
   { key: "first_seen",   label: "First Seen"    },
   { key: "last_seen",    label: "Last Seen"     },
 ];
@@ -179,6 +180,7 @@ export function DeviceTable({ devices, onSelect }: Props) {
                     ? <span className="text-emerald-400">✓</span>
                     : <span className="text-amber-400">?</span>}
                 </td>
+                <td className="px-3 py-2 text-slate-400 max-w-64 truncate">{d.description ?? "—"}</td>
                 <td className="px-3 py-2 text-slate-500 text-xs whitespace-nowrap">{fmt(d.first_seen)}</td>
                 <td className="px-3 py-2 text-slate-400 text-xs whitespace-nowrap">{fmt(d.last_seen)}</td>
               </tr>

@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
 from database import AsyncSessionLocal
-from models import Alert, Device, DeviceHistory, ScanEvent
+from models import Alert, Device, DeviceEvent, DeviceHistory, PresenceSnapshot, ScanEvent
 
 logger = logging.getLogger("scanner")
 
@@ -25,7 +25,12 @@ logger = logging.getLogger("scanner")
 def _arp_scan(cidr: str, timeout: int = 3) -> list[dict]:
     """Run a synchronous ARP scan and return [{ip, mac}, ...]."""
     pkt = Ether(dst="ff:ff:ff:ff:ff:ff") / ARP(pdst=cidr)
-    ans, _ = srp(pkt, timeout=timeout, verbose=False, iface_hint=cidr.split("/")[0])
+    # Never use iface_hint=cidr segment (invalid). Prefer host network namespace (see docker-compose) on NAS.
+    kwargs: dict = {"timeout": timeout, "verbose": False}
+    iface = getattr(settings, "scan_iface", None)
+    if iface:
+        kwargs["iface"] = iface
+    ans, _ = srp(pkt, **kwargs)
     return [{"ip": rcv.psrc, "mac": rcv.hwsrc.lower()} for _, rcv in ans]
 
 
@@ -71,6 +76,14 @@ async def run_scan() -> None:
                 d.online = is_online
                 d.last_seen = datetime.now(timezone.utc) if is_online else d.last_seen
                 db.add(DeviceHistory(device_id=d.id, scan_id=scan.id, ip=d.ip, online=is_online))
+                db.add(
+                    DeviceEvent(
+                        device_id=d.id,
+                        event_type="join" if is_online else "leave",
+                        old_value="offline" if is_online else "online",
+                        new_value="online" if is_online else "offline",
+                    )
+                )
 
                 if not is_online:
                     lost_count += 1
@@ -82,6 +95,7 @@ async def run_scan() -> None:
                     ))
 
             if is_online and found_by_mac[d.mac] != d.ip:
+                previous_ip = d.ip
                 db.add(Alert(
                     device_id=d.id,
                     alert_type="ip_change",
@@ -89,9 +103,25 @@ async def run_scan() -> None:
                     message=f"{d.hostname or d.mac} IP changed {d.ip} → {found_by_mac[d.mac]}",
                 ))
                 d.ip = found_by_mac[d.mac]
+                db.add(
+                    DeviceEvent(
+                        device_id=d.id,
+                        event_type="ip_change",
+                        old_value=str(previous_ip) if previous_ip else None,
+                        new_value=found_by_mac[d.mac],
+                    )
+                )
 
             if is_online:
                 d.last_seen = datetime.now(timezone.utc)
+            db.add(
+                PresenceSnapshot(
+                    device_id=d.id,
+                    ip=found_by_mac.get(d.mac, d.ip),
+                    mac=d.mac,
+                    alive=is_online,
+                )
+            )
 
         # Register new devices
         for mac, ip in found_by_mac.items():
@@ -114,6 +144,22 @@ async def run_scan() -> None:
                     message=f"New device discovered: {mac} ({ip})",
                 ))
                 new_count += 1
+                db.add(
+                    DeviceEvent(
+                        device_id=new_d.id,
+                        event_type="new_device",
+                        old_value=None,
+                        new_value=f"{mac}@{ip}",
+                    )
+                )
+                db.add(
+                    PresenceSnapshot(
+                        device_id=new_d.id,
+                        ip=ip,
+                        mac=mac,
+                        alive=True,
+                    )
+                )
 
         scan.new_devices = new_count
         scan.lost_devices = lost_count

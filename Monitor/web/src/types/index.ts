@@ -55,7 +55,7 @@ export interface AdguardStats {
 export type SortKey = keyof Pick<
   Device,
   "hostname" | "ip" | "mac" | "manufacturer" | "category" | "room" |
-  "connection" | "ip_type" | "online" | "known" | "first_seen" | "last_seen"
+  "connection" | "ip_type" | "online" | "known" | "first_seen" | "last_seen" | "description"
 > | "status";
 
 export type SortDir = "asc" | "desc";

@@ -27,6 +27,43 @@ CREATE INDEX idx_devices_mac  ON devices (mac);
 CREATE INDEX idx_devices_ip   ON devices (ip);
 CREATE INDEX idx_devices_room ON devices (room);
 
+-- Plan-required event and time-series tables
+
+CREATE TABLE IF NOT EXISTS device_events (
+    id          BIGSERIAL   PRIMARY KEY,
+    device_id   UUID        NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+    event_type  TEXT        NOT NULL, -- join | leave | ip_change | mac_change | new_device
+    old_value   TEXT,
+    new_value   TEXT,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_device_events_device ON device_events (device_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS presence_snapshots (
+    id          BIGSERIAL   PRIMARY KEY,
+    device_id   UUID        NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+    sampled_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    ip          INET,
+    mac         MACADDR,
+    alive       BOOLEAN     NOT NULL DEFAULT FALSE,
+    rtt_ms      INT
+);
+
+CREATE INDEX idx_presence_device ON presence_snapshots (device_id, sampled_at DESC);
+
+CREATE TABLE IF NOT EXISTS traffic_samples (
+    id               BIGSERIAL   PRIMARY KEY,
+    device_id        UUID        REFERENCES devices(id) ON DELETE CASCADE,
+    sampled_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    bytes_in         BIGINT      NOT NULL DEFAULT 0,
+    bytes_out        BIGINT      NOT NULL DEFAULT 0,
+    dns_query_count  INT         NOT NULL DEFAULT 0,
+    dns_block_count  INT         NOT NULL DEFAULT 0
+);
+
+CREATE INDEX idx_traffic_device ON traffic_samples (device_id, sampled_at DESC);
+
 -- ─── Scan Events ─────────────────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS scan_events (

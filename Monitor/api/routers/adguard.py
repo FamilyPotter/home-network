@@ -54,6 +54,21 @@ async def querylog_cached(
     return result.scalars().all()
 
 
+@router.get("/querylog/live")
+async def querylog_live(
+    clientid: str | None = Query(default=None),
+    limit: int = Query(default=50, le=500),
+):
+    """Live AdGuard query log drill-down, optionally filtered by client IP."""
+    params: dict[str, str | int] = {"limit": limit}
+    if clientid:
+        params["client"] = clientid
+    try:
+        return await _ag_get("/control/querylog", params)
+    except Exception as exc:
+        raise HTTPException(502, f"AdGuard unreachable: {exc}")
+
+
 @router.get("/dhcp")
 async def adguard_dhcp():
     """Return current DHCP leases from AdGuard."""
