@@ -45,6 +45,8 @@ Production builds use **same-origin** requests to `/api/...` (nginx proxies to t
 
 The **DNS** column matches devices by **IP** to AdGuard’s **top clients** list (statistics interval configured in AdGuard). LAN bandwidth per device is not available without extra tooling.
 
+The **`adguard_queries`** table is filled by a scheduled job (`poll_adguard_queries`, interval **`ADGUARD_QUERY_POLL_SEC`**, default 300s). If it stays empty, confirm **Settings → General settings → Statistics / Query logs** in AdGuard allows query logging and that API credentials in `.env` work.
+
 ## Scanner
 
 The FastAPI service runs an ARP scan every 120 seconds (configurable via `POLL_INTERVAL_SEC` in `.env`).

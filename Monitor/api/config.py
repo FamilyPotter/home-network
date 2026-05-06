@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     adguard_password: str = ""
 
     poll_interval_sec: int = 120
+    # How often to pull query log into Postgres (adguard_queries); separate from stats/traffic.
+    adguard_query_poll_sec: int = 300
     network_cidr: str = "192.168.0.0/24"
     # Optional: Linux interface name for ARP (e.g. eth0, bond0, ovs_eth0). Leave unset to let scapy choose.
     scan_iface: str | None = None

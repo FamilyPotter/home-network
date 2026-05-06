@@ -5,6 +5,7 @@ Runs as a background task via APScheduler.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 from datetime import datetime, timezone
@@ -174,12 +175,34 @@ async def run_scan() -> None:
 
 # ─── AdGuard query log poller ──────────────────────────────────────────────────
 
+def _querylog_answer_text(entry: dict) -> str | None:
+    ans = entry.get("answer")
+    if ans is None:
+        return None
+    if isinstance(ans, str):
+        return ans
+    try:
+        return json.dumps(ans)
+    except (TypeError, ValueError):
+        return str(ans)
+
+
+def _querylog_elapsed_ms(entry: dict) -> int | None:
+    raw = entry.get("elapsedMs")
+    if raw is None:
+        return None
+    try:
+        return int(float(str(raw)))
+    except (TypeError, ValueError):
+        return None
+
+
 async def poll_adguard_queries() -> None:
     """Fetch recent AdGuard query log and persist to adguard_queries table."""
     url = f"{settings.adguard_url}/control/querylog"
     params = {"limit": 200, "response_status": "all"}
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
+        async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.get(
                 url, params=params,
                 auth=(settings.adguard_user, settings.adguard_password),
@@ -191,19 +214,31 @@ async def poll_adguard_queries() -> None:
         return
 
     from models import AdguardQuery
+
     rows = []
-    for entry in data.get("data", []):
+    for entry in data.get("data", []) or []:
+        if not isinstance(entry, dict):
+            continue
+        q = entry.get("question")
+        qname = None
+        if isinstance(q, dict):
+            qname = q.get("name")
+        elif isinstance(q, str):
+            qname = q
+
         rows.append(AdguardQuery(
             fetched_at=datetime.now(timezone.utc),
             client_ip=entry.get("client"),
-            question=entry.get("question", {}).get("name"),
-            answer=entry.get("answer"),
-            status=entry.get("reason"),
-            elapsed_ms=entry.get("elapsedMs"),
+            question=qname,
+            answer=_querylog_answer_text(entry),
+            status=entry.get("reason") or entry.get("status"),
+            elapsed_ms=_querylog_elapsed_ms(entry),
         ))
 
     if rows:
         async with AsyncSessionLocal() as db:
             db.add_all(rows)
             await db.commit()
-    logger.debug("AdGuard: persisted %d query log entries", len(rows))
+        logger.info("AdGuard query log: persisted %d rows into adguard_queries", len(rows))
+    else:
+        logger.debug("AdGuard query log: no rows returned")

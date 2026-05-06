@@ -45,8 +45,9 @@ async def startup():
 
     scheduler.start()
     logger.info(
-        "Scheduler started — ARP and AdGuard polling every %ds",
+        "Scheduler started — scan/traffic every %ds; AdGuard query log DB sync every %ds",
         settings.poll_interval_sec,
+        settings.adguard_query_poll_sec,
     )
 
 
