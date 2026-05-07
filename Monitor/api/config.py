@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     postgres_user: str = "netmonitor"
-    postgres_password: str = "NM_Chester123"
+    postgres_password: str = ""
     postgres_db: str = "netmonitor"
     postgres_host: str = "db"
     postgres_port: int = 5432

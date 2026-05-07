@@ -30,10 +30,10 @@ if [[ ! -f .env ]]; then
   echo "  .env not found — creating from defaults."
   cat > .env <<'ENVEOF'
 POSTGRES_USER=netmonitor
-POSTGRES_PASSWORD=NM_Chester123
+POSTGRES_PASSWORD=change_me_strong_db_password
 POSTGRES_DB=netmonitor
-PGADMIN_DEFAULT_EMAIL=admin@home.local
-PGADMIN_DEFAULT_PASSWORD=pgadmin
+PGADMIN_DEFAULT_EMAIL=admin@example.local
+PGADMIN_DEFAULT_PASSWORD=change_me_pgadmin_login_password
 ADGUARD_URL=http://192.168.0.150:3000
 ADGUARD_USER=admin
 ADGUARD_PASSWORD=

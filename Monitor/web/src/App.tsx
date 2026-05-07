@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useEffect, Component, ReactNode } from "react";
-import { Wifi, Server, AlertTriangle, Search, RefreshCw, Activity } from "lucide-react";
+import { Wifi, Server, AlertTriangle, Search, RefreshCw, Activity, X } from "lucide-react";
 import { Device, Stats, Alert as AlertType, AdguardStats } from "./types";
 import { usePolled, apiFetch } from "./hooks/useApi";
 import { StatCard } from "./components/StatCard";
@@ -7,6 +7,8 @@ import { DeviceTable } from "./components/DeviceTable";
 import { DeviceDetail } from "./components/DeviceDetail";
 import { AlertBanner } from "./components/AlertBanner";
 import { TrafficChart } from "./components/TrafficChart";
+import { TrackerTab } from "./components/TrackerTab";
+import { AlertsTab } from "./components/AlertsTab";
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null };
@@ -34,7 +36,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
   }
 }
 
-type Tab = "devices" | "traffic" | "alerts";
+type Tab = "devices" | "traffic" | "trackers" | "alerts";
 
 /** Must match Monitor API `ALLOWED_SCAN_INTERVAL_SEC`. */
 const SCAN_INTERVAL_OPTIONS: { label: string; seconds: number }[] = [
@@ -57,6 +59,11 @@ export default function App() {
   const [scanIntervalLoading, setScanIntervalLoading] = useState(true);
   const [intervalSaving, setIntervalSaving] = useState(false);
 
+  // ── Global device filter (shared across all tabs) ──────────────────────────
+  const [globalSearch, setGlobalSearch] = useState("");
+  const [globalRoom,   setGlobalRoom]   = useState("");
+  const [globalCat,    setGlobalCat]    = useState("");
+
   useEffect(() => {
     apiFetch<{ seconds: number }>("/settings/scan-interval")
       .then((r) => setScanIntervalSec(r.seconds))
@@ -66,7 +73,7 @@ export default function App() {
 
   const { data: devices, loading: devLoading, refetch: refetchDevices } = usePolled<Device[]>("/devices/?limit=500", 15_000);
   const { data: stats, refetch: refetchStats } = usePolled<Stats>("/stats", 15_000);
-  const { data: alerts, refetch: refetchAlerts } = usePolled<AlertType[]>("/alerts/?limit=200", 10_000);
+  const { data: alerts, refetch: refetchAlerts } = usePolled<AlertType[]>("/alerts/?limit=500", 10_000);
   const {
     data: agStats,
     loading: agLoading,
@@ -81,6 +88,47 @@ export default function App() {
     }
     return m;
   }, [agStats]);
+
+  // ── Filter-derived values ──────────────────────────────────────────────────
+  const allDevices = devices ?? [];
+
+  const rooms = useMemo(
+    () => [...new Set(allDevices.map(d => d.room).filter(Boolean))].sort() as string[],
+    [allDevices],
+  );
+  const cats = useMemo(
+    () => [...new Set(allDevices.map(d => d.category).filter(Boolean))].sort() as string[],
+    [allDevices],
+  );
+
+  const filteredDevices = useMemo(() => {
+    let d = allDevices;
+    if (globalSearch) {
+      const q = globalSearch.toLowerCase();
+      d = d.filter(x =>
+        [x.hostname, x.ip, x.mac, x.manufacturer, x.room, x.category]
+          .some(v => v?.toLowerCase().includes(q)),
+      );
+    }
+    if (globalRoom) d = d.filter(x => x.room === globalRoom);
+    if (globalCat)  d = d.filter(x => x.category === globalCat);
+    return d;
+  }, [allDevices, globalSearch, globalRoom, globalCat]);
+
+  const hasGlobalFilter = globalSearch !== "" || globalRoom !== "" || globalCat !== "";
+
+  const filteredDeviceIps = useMemo(
+    () => hasGlobalFilter
+      ? new Set(filteredDevices.map(d => d.ip).filter(Boolean) as string[])
+      : null,
+    [filteredDevices, hasGlobalFilter],
+  );
+  const filteredDeviceIds = useMemo(
+    () => hasGlobalFilter
+      ? new Set(filteredDevices.map(d => d.id).filter(Boolean) as string[])
+      : null,
+    [filteredDevices, hasGlobalFilter],
+  );
 
   const triggerScan = useCallback(async () => {
     setScanning(true);
@@ -173,9 +221,53 @@ export default function App() {
           <AlertBanner alerts={alerts} onAck={() => { refetchAlerts(); refetchStats(); }} />
         )}
 
+        {/* Global filter bar */}
+        <div className="flex flex-wrap gap-2 items-center py-1">
+          <div className="relative flex-1 min-w-48">
+            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+            <input
+              type="search"
+              placeholder="Search hostname, IP, MAC, room…"
+              value={globalSearch}
+              onChange={e => setGlobalSearch(e.target.value)}
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-8 pr-3 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500"
+            />
+          </div>
+          <select
+            value={globalRoom}
+            onChange={e => setGlobalRoom(e.target.value)}
+            className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 cursor-pointer"
+          >
+            <option value="">All rooms</option>
+            {rooms.map(r => <option key={r}>{r}</option>)}
+          </select>
+          <select
+            value={globalCat}
+            onChange={e => setGlobalCat(e.target.value)}
+            className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 cursor-pointer"
+          >
+            <option value="">All categories</option>
+            {cats.map(c => <option key={c}>{c}</option>)}
+          </select>
+          <span className="text-xs text-slate-500 whitespace-nowrap">
+            {hasGlobalFilter
+              ? <><strong className="text-sky-400">{filteredDevices.length}</strong> of {allDevices.length} devices</>
+              : <>{allDevices.length} devices</>
+            }
+          </span>
+          {hasGlobalFilter && (
+            <button
+              onClick={() => { setGlobalSearch(""); setGlobalRoom(""); setGlobalCat(""); }}
+              className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200 px-2.5 py-1.5 rounded-lg border border-slate-700 hover:border-slate-500 transition-colors whitespace-nowrap"
+            >
+              <X size={11} /> Clear
+            </button>
+          )}
+        </div>
+
         {/* Tab nav */}
         <div className="flex gap-1 border-b border-slate-800">
-          {(["devices", "traffic", "alerts"] as Tab[]).map(t => (
+          {(["devices", "traffic", "trackers", "alerts"] as Tab[]).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -200,7 +292,7 @@ export default function App() {
           devLoading
             ? <p className="text-slate-600 text-center py-20">Loading devices…</p>
             : <DeviceTable
-                devices={devices ?? []}
+                devices={filteredDevices}
                 dnsByIp={dnsByIp}
                 dnsLoading={agLoading}
                 dnsError={agError}
@@ -214,23 +306,24 @@ export default function App() {
             loading={agLoading}
             error={agError}
             onRetry={refetchAg}
+            devices={devices ?? []}
+            filteredDeviceIps={filteredDeviceIps}
+          />
+        )}
+
+        {tab === "trackers" && (
+          <TrackerTab
+            devices={devices ?? []}
+            filteredDeviceIps={filteredDeviceIps}
           />
         )}
 
         {tab === "alerts" && (
-          <div className="space-y-2">
-            {(alerts ?? []).length === 0
-              ? <p className="text-slate-600 text-center py-10">No alerts.</p>
-              : (alerts ?? []).map(a => (
-                <div key={a.id} className={`rounded-lg border px-4 py-3 text-sm flex justify-between ${
-                  a.acknowledged ? "opacity-40 bg-slate-800/30 border-slate-700" : "bg-rose-500/10 border-rose-500/30 text-rose-300"
-                }`}>
-                  <span>{a.message ?? a.alert_type}</span>
-                  <span className="text-xs opacity-60">{new Date(a.created_at).toLocaleString("en-GB")}</span>
-                </div>
-              ))
-            }
-          </div>
+          <AlertsTab
+            alerts={alerts ?? []}
+            onAck={() => { refetchAlerts(); refetchStats(); }}
+            filteredDeviceIds={filteredDeviceIds}
+          />
         )}
 
       </main>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { X, Wifi, Cable, Shield } from "lucide-react";
+import { X, Wifi, Cable, Shield, ChevronDown, ChevronRight } from "lucide-react";
 import { Device, AdguardStats } from "../types";
 import { apiFetch } from "../hooks/useApi";
 import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer } from "recharts";
@@ -39,18 +39,48 @@ function formatAnswer(answer: unknown): string {
 
 interface LiveEntry {
   qhost?: string;
-  question?: { name?: string };
+  question?: { name?: string; type?: string; class?: string };
   answer?: unknown;
   reason?: string;
+  status?: string;
+  time?: string;
+  client?: string;
+  elapsedMs?: string;
+  upstream?: string;
+  rules?: Array<{ text?: string; filter_list_id?: number }>;
   tracker_name?: string | null;
   tracker_category?: string | null;
   tracker_org?: string | null;
+}
+
+/** Relative time helper (short form). */
+function relTimeShort(dt: string | null | undefined): string {
+  if (!dt) return "";
+  const diff = Date.now() - new Date(dt).getTime();
+  if (diff < 0) return "";
+  const s = Math.floor(diff / 1000);
+  if (s < 60)  return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60)  return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24)  return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
+
+/** Colour class for AdGuard reason/status. */
+function reasonColor(reason?: string): string {
+  if (!reason) return "bg-slate-600";
+  if (reason.startsWith("Filtered") || reason.includes("Block")) return "bg-rose-500";
+  if (reason === "NotFilteredNotFound" || reason === "NotFilteredWhiteList") return "bg-emerald-500";
+  if (reason === "NotFilteredAllowList") return "bg-sky-500";
+  return "bg-slate-500";
 }
 
 export function DeviceDetail({ device, onClose }: Props) {
   const [agStats, setAgStats] = useState<AdguardStats | null>(null);
   const [queryLog, setQueryLog] = useState<LiveEntry[]>([]);
   const [agLoading, setAgLoading] = useState(true);
+  const [expanded, setExpanded] = useState<number | null>(null);
 
   useEffect(() => {
     apiFetch<AdguardStats>("/adguard/stats")
@@ -148,22 +178,73 @@ export function DeviceDetail({ device, onClose }: Props) {
 
             {/* Live query log */}
             <div className="mt-4">
-              <p className="text-xs text-slate-500 mb-2">Last 50 DNS queries</p>
-              <div className="max-h-64 overflow-auto border border-slate-700 rounded-lg">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs text-slate-500">Last 50 DNS queries for <span className="font-mono text-sky-400">{device.ip}</span></p>
+                <p className="text-xs text-slate-600">Click a row for details</p>
+              </div>
+              <div className="max-h-80 overflow-auto border border-slate-700 rounded-lg divide-y divide-slate-800">
                 {queryLog.length === 0 ? (
                   <p className="text-slate-600 text-sm p-3">No recent per-device query log entries.</p>
                 ) : (
                   queryLog.map((q, idx) => {
                     const host = q.question?.name ?? q.qhost ?? "unknown";
                     const ans = formatAnswer(q.answer);
+                    const isOpen = expanded === idx;
+                    const isBlocked = q.reason?.startsWith("Filtered") ?? false;
                     return (
-                      <div key={idx} className="px-3 py-2 border-b border-slate-800 text-xs flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <span className="text-slate-300 break-all">{host}</span>
-                          {ans && <span className="text-slate-500 ml-1">→ {ans}</span>}
+                      <div key={idx}>
+                        {/* Summary row */}
+                        <div
+                          onClick={() => setExpanded(isOpen ? null : idx)}
+                          className="px-3 py-2 text-xs flex items-center gap-2 cursor-pointer hover:bg-slate-800/60 transition-colors"
+                        >
+                          <span className={`shrink-0 w-1.5 h-1.5 rounded-full ${reasonColor(q.reason)}`} title={q.reason} />
+                          <span className={`min-w-0 flex-1 break-all ${isBlocked ? "text-rose-400 line-through opacity-70" : "text-slate-300"}`}>
+                            {host}
+                          </span>
+                          <span className="text-slate-600 shrink-0">{relTimeShort(q.time)}</span>
+                          {q.tracker_category && (
+                            <CategoryBadge category={q.tracker_category} name={q.tracker_name} />
+                          )}
+                          <span className="shrink-0 text-slate-600">
+                            {isOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                          </span>
                         </div>
-                        {q.tracker_category && (
-                          <CategoryBadge category={q.tracker_category} name={q.tracker_name} />
+
+                        {/* Expanded detail */}
+                        {isOpen && (
+                          <div className="px-3 py-3 bg-slate-800/70 text-xs grid grid-cols-2 gap-x-4 gap-y-2">
+                            <DetailRow label="Domain"   value={host} mono />
+                            <DetailRow label="Type"     value={q.question?.type ?? "—"} />
+                            <DetailRow label="Status"   value={q.status ?? "—"} />
+                            <DetailRow label="Reason"   value={q.reason ?? "—"} />
+                            {ans && <DetailRow label="Answer" value={ans} mono />}
+                            <DetailRow label="Elapsed"  value={q.elapsedMs ? `${q.elapsedMs} ms` : "—"} />
+                            <DetailRow label="Time"     value={q.time ? new Date(q.time).toLocaleString("en-GB") : "—"} />
+                            {q.upstream && <DetailRow label="Upstream" value={q.upstream} mono />}
+                            {q.rules && q.rules.length > 0 && (
+                              <div className="col-span-2">
+                                <p className="text-slate-500 mb-0.5">Block rule</p>
+                                <p className="font-mono text-rose-300 break-all">{q.rules[0].text}</p>
+                              </div>
+                            )}
+                            {/* WhoTracks.me section */}
+                            {(q.tracker_name || q.tracker_category || q.tracker_org) && (
+                              <div className="col-span-2 mt-1 pt-2 border-t border-slate-700">
+                                <p className="text-slate-500 mb-1.5 uppercase tracking-wider text-[10px]">WhoTracks.me</p>
+                                <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                                  {q.tracker_name && <DetailRow label="Tracker"      value={q.tracker_name} />}
+                                  {q.tracker_category && (
+                                    <div>
+                                      <p className="text-slate-500 mb-0.5">Category</p>
+                                      <CategoryBadge category={q.tracker_category} name={q.tracker_name} />
+                                    </div>
+                                  )}
+                                  {q.tracker_org && <DetailRow label="Organisation" value={q.tracker_org} />}
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         )}
                       </div>
                     );
@@ -175,6 +256,15 @@ export function DeviceDetail({ device, onClose }: Props) {
 
         </div>
       </div>
+    </div>
+  );
+}
+
+function DetailRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div>
+      <p className="text-slate-500 mb-0.5">{label}</p>
+      <p className={`break-all ${mono ? "font-mono text-sky-300" : "text-slate-200"}`}>{value}</p>
     </div>
   );
 }

@@ -22,6 +22,7 @@
 #   docker compose down                  Stop all services
 # =============================================================================
 
+# Docker image tags are pinned for reproducible upgrades; review release notes before bumping.
 services:
 
   # ---------------------------------------------------------------------------
@@ -35,7 +36,7 @@ services:
   #   Port 80 is reserved by QNAP QTS — do not change to 80.
   # ---------------------------------------------------------------------------
   adguardhome:
-    image: adguard/adguardhome:latest
+    image: adguard/adguardhome:v0.107.74
     container_name: adguardhome
     network_mode: host
     volumes:
@@ -60,7 +61,7 @@ services:
   # After auth: approve subnet routes in the admin console
   # ---------------------------------------------------------------------------
   tailscale:
-    image: tailscale/tailscale:latest
+    image: tailscale/tailscale:v1.84.3
     container_name: tailscale
     network_mode: host
     volumes:
@@ -86,7 +87,7 @@ services:
   # For remote access under CGNAT, use Tailscale above.
   # ---------------------------------------------------------------------------
   ddclient:
-    image: lscr.io/linuxserver/ddclient:latest
+    image: lscr.io/linuxserver/ddclient:3.11.2
     container_name: ddclient
     environment:
       - PUID=1000

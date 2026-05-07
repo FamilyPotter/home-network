@@ -10,8 +10,12 @@ DHCP/ddclient/ddclient.conf
 # Tailscale state directory contains WireGuard private keys
 VPN/tailscale/
 
-# AdGuard Home runtime/work directory — large, changes constantly, not config
-AdGuard/work/
+# AdGuard: optional local snapshot of live NAS config (may duplicate password hash)
+AdGuard/conf/AdGuardHome_nas_current.yaml
+
+# Monitor: private device inventory (committed template is seed_inventory.example.sql)
+Monitor/db/seed_inventory.sql
+
 
 # WireGuard private keys (if ever generated)
 VPN/wireguard/*.conf

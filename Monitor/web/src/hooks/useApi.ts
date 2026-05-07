@@ -16,6 +16,9 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     ...init,
   });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  // 204 No Content (and any zero-length body) — return undefined rather than crashing on .json()
+  const ct = res.headers.get("content-type") ?? "";
+  if (res.status === 204 || !ct.includes("json")) return undefined as unknown as T;
   return res.json() as Promise<T>;
 }
 

@@ -39,6 +39,7 @@ flowchart TD
     subgraph PoE_SW1 [PoE Cameras on FS108P]
         CamGate["HIK CCTV Gate\n192.168.0.30"]
         CamRear["HIK CCTV Rear\n192.168.0.31"]
+        CamChickens["HIK CCTV Chickens\n192.168.0.32"]
     end
 
     subgraph WiFiMesh [Wi-Fi Mesh — Wireless Backhaul]
@@ -54,6 +55,7 @@ flowchart TD
     FS108P -->|"Wired"| NeoHub
     FS108P -->|"PoE"| CamGate
     FS108P -->|"PoE"| CamRear
+    FS108P -->|"PoE"| CamChickens
     FS108P -->|"Gigabit uplink"| NVR
     FS108P -->|"Gigabit uplink"| C460
     FS108P -->|"Gigabit uplink"| Velux
@@ -62,7 +64,6 @@ flowchart TD
     FS108P -->|"Gigabit uplink"| CamSide
     FS108P -->|"Gigabit uplink"| CamFront
     FS108P -->|"Gigabit uplink"| CamCh5
-    FS108P -->|"Gigabit uplink"| CamChickens
     DecoMain -.->|"Wireless backhaul"| DecoAP1
     DecoMain -.->|"Wireless backhaul"| DecoAP2
 ```

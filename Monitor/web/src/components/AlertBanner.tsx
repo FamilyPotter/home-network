@@ -1,4 +1,5 @@
-import { Bell, X } from "lucide-react";
+import { Bell, CheckCheck } from "lucide-react";
+import { useState } from "react";
 import { Alert } from "../types";
 import { apiFetch } from "../hooks/useApi";
 import { clsx } from "clsx";
@@ -17,9 +18,16 @@ export function AlertBanner({ alerts, onAck }: Props) {
   const unack = alerts.filter(a => !a.acknowledged);
   if (unack.length === 0) return null;
 
+  const [acking, setAcking] = useState(false);
+
   async function ackAll() {
-    await apiFetch("/alerts/acknowledge-all", { method: "POST" });
-    onAck();
+    setAcking(true);
+    try {
+      await apiFetch("/alerts/acknowledge-all", { method: "POST" });
+      onAck();
+    } finally {
+      setAcking(false);
+    }
   }
 
   return (
@@ -30,25 +38,26 @@ export function AlertBanner({ alerts, onAck }: Props) {
         </p>
         <button
           onClick={ackAll}
-          className="text-xs text-slate-500 hover:text-slate-200 underline transition-colors"
+          disabled={acking}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-700 hover:bg-slate-600 text-slate-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
-          Acknowledge all
+          <CheckCheck size={12} />
+          {acking ? "Acknowledging…" : "Acknowledge all"}
         </button>
       </div>
-      {unack.slice(0, 5).map(a => (
-        <div
-          key={a.id}
-          className={clsx("rounded-lg border px-3 py-2 text-sm flex items-start justify-between gap-2", sevColour(a.severity))}
-        >
-          <span>{a.message ?? a.alert_type}</span>
-          <span className="text-xs opacity-60 whitespace-nowrap shrink-0">
-            {new Date(a.created_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
-          </span>
-        </div>
-      ))}
-      {unack.length > 5 && (
-        <p className="text-xs text-slate-600 text-right">…and {unack.length - 5} more</p>
-      )}
+      <div className="max-h-56 overflow-y-auto space-y-1 pr-1">
+        {unack.map(a => (
+          <div
+            key={a.id}
+            className={clsx("rounded-lg border px-3 py-2 text-sm flex items-start justify-between gap-2", sevColour(a.severity))}
+          >
+            <span>{a.message ?? a.alert_type}</span>
+            <span className="text-xs opacity-60 whitespace-nowrap shrink-0">
+              {new Date(a.created_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

@@ -309,7 +309,7 @@ AdGuard Home web interface: **http://192.168.0.150:3000**
 
 (Port 80 is reserved by QNAP QTS — AdGuard uses port 3000.)
 
-Credentials: `admin` / `FamilyPotter@NAS1`
+Admin credentials are **not** documented in this repository. The web password is stored as a **bcrypt hash** in [`AdGuard/conf/AdGuardHome.yaml`](AdGuard/conf/AdGuardHome.yaml). Use the AdGuard Home UI **Settings → General settings** to change the password if this config was ever exposed in plaintext elsewhere.
 
 ---
 
@@ -476,8 +476,7 @@ D:\Network Privacy\                     ← Git repository root
 │
 ├── AdGuard/
 │   ├── conf/
-│   │   ├── AdGuardHome.yaml            ← Full AdGuard config (DHCP, DNS, filters, leases)
-│   │   └── AdGuardHome_nas_current.yaml ← Backup of NAS running config
+│   │   └── AdGuardHome.yaml            ← Full AdGuard config (DHCP, DNS, filters, leases)
 │   └── work/                           ← Runtime data (NOT committed — created by container)
 │       └── data/
 │           └── leases.json             ← Live DHCP lease database
@@ -510,7 +509,7 @@ D:\Network Privacy\                     ← Git repository root
 |---|---|---|
 | `docker-compose.yml` | ✅ Yes | No secrets (`.env` is separate) |
 | `.env` | ❌ No | Contains Tailscale auth key |
-| `AdGuard/conf/AdGuardHome.yaml` | ✅ Yes | Config only (no plaintext passwords — bcrypt hash) |
+| `AdGuard/conf/AdGuardHome.yaml` | ✅ Yes | Config only (admin password is a bcrypt hash — treat as sensitive; rotate via UI if repo was exposed) |
 | `AdGuard/work/` | ❌ No | Runtime data, large, changes constantly |
 | `DDNS/ddclient.conf` | ❌ No | Contains DDNS password |
 | `VPN/tailscale/` | ❌ No | Contains private keys |

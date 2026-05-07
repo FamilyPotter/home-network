@@ -72,12 +72,24 @@ async def querylog_live(
     clientid: str | None = Query(default=None),
     limit: int = Query(default=50, le=500),
 ):
-    """Live AdGuard query log drill-down, optionally filtered by client IP."""
+    """Live AdGuard query log, optionally filtered by client IP, enriched with WhoTracks.me data."""
+    import tracker_lookup  # loaded at startup via preload()
     params: dict[str, str | int] = {"limit": limit}
     if clientid:
-        params["client"] = clientid
+        # AdGuard v0.107 uses 'search' (matches domain OR client IP); 'client' is silently ignored
+        params["search"] = clientid
     try:
-        return await _ag_get("/control/querylog", params)
+        raw = await _ag_get("/control/querylog", params)
+        for entry in raw.get("data") or []:
+            q = entry.get("question") or {}
+            qname = q.get("name") or entry.get("qhost")
+            if qname:
+                info = tracker_lookup.lookup_domain(qname)
+                if info:
+                    entry["tracker_name"]     = info.name
+                    entry["tracker_category"] = info.category
+                    entry["tracker_org"]      = info.org
+        return raw
     except Exception as exc:
         raise HTTPException(502, f"AdGuard unreachable: {exc}")
 

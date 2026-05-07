@@ -71,13 +71,20 @@ async def _run_migrations(conn) -> None:
 
 
 async def _seed_devices_if_empty(conn) -> None:
-    """Seed the device inventory from seed_inventory.sql if the devices table is empty."""
+    """Seed the device inventory from seed_inventory.sql (or example) if the devices table is empty."""
     count = (await conn.execute(text("SELECT COUNT(*) FROM devices"))).scalar()
     if count and count > 0:
         return
-    seed_file = Path("/app/db/seed_inventory.sql")
-    if not seed_file.exists():
-        logger.warning("seed_inventory.sql not found at %s — devices table will be empty", seed_file)
+    seed_file: Path | None = None
+    for name in ("seed_inventory.sql", "seed_inventory.example.sql"):
+        candidate = Path("/app/db") / name
+        if candidate.exists():
+            seed_file = candidate
+            break
+    if seed_file is None:
+        logger.warning(
+            "No seed_inventory.sql or seed_inventory.example.sql under /app/db — devices table will be empty"
+        )
         return
     sql = seed_file.read_text()
     for stmt in sql.split(";"):

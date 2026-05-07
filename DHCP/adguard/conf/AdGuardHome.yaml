@@ -94,6 +94,10 @@ dns:
       answer: 192.168.0.68
     - domain: maindesk.lan
       answer: 192.168.0.72
+    - domain: SDP-LAPTOP
+      answer: 192.168.0.52
+    - domain: SDP-LAPTOP.lan
+      answer: 192.168.0.52
     - domain: fingbox.lan
       answer: 192.168.0.144
     - domain: sonosfamily.lan
@@ -264,6 +268,23 @@ dhcp:
     - hw_addr: c6:6f:be:a5:27:fd
       ip: 192.168.0.70
       hostname: Family-iPad
+
+    # Philips Air+ air purifier — Master Bedroom
+    - hw_addr: d0:ba:e4:e7:95:25
+      ip: 192.168.0.75
+      hostname: PhilipsAir
+
+    # Tapo RV10 Lite robot vacuum — Master Bedroom
+    - hw_addr: 00:8a:76:9c:b1:8a
+      ip: 192.168.0.79
+      hostname: FamilyiPad
+
+    - hw_addr: e8:6f:38:a9:df:57
+      ip: 192.168.0.52
+      hostname: SDP-LAPTOP
+  - hw_addr: ac:15:a2:2d:9b:69
+      ip: 192.168.0.77
+      hostname: CliveVacuum
 
 clients:
   runtime_sources:

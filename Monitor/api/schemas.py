@@ -107,6 +107,16 @@ class AdguardQueryOut(BaseModel):
     tracker_category: str | None = None
     tracker_org: str | None = None
 
+    @field_validator("client_ip", mode="before")
+    @classmethod
+    def _client_ip_str(cls, v):
+        return str(v) if v is not None else None
+
+    @field_validator("client_mac", mode="before")
+    @classmethod
+    def _client_mac_str(cls, v):
+        return str(v) if v is not None else None
+
 
 class StatsOut(BaseModel):
     total_devices: int

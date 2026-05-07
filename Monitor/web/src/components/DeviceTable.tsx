@@ -3,6 +3,7 @@ import { clsx } from "clsx";
 import { Device, SortDir, SortKey } from "../types";
 
 interface Props {
+  /** Already globally-filtered list from App */
   devices: Device[];
   /** Client IP (or AdGuard client label) → DNS query count from AdGuard stats */
   dnsByIp: Record<string, number>;
@@ -15,6 +16,7 @@ const COLUMNS: { key: SortKey; label: string }[] = [
   { key: "status",       label: "Status"       },
   { key: "dns_queries",  label: "DNS"          },
   { key: "hostname",     label: "Hostname"      },
+  { key: "last_seen",    label: "Last Seen"     },
   { key: "ip",           label: "IP"            },
   { key: "mac",          label: "MAC"           },
   { key: "manufacturer", label: "Manufacturer"  },
@@ -25,12 +27,27 @@ const COLUMNS: { key: SortKey; label: string }[] = [
   { key: "known",        label: "Known"         },
   { key: "description",  label: "Description"   },
   { key: "first_seen",   label: "First Seen"    },
-  { key: "last_seen",    label: "Last Seen"     },
 ];
 
 function fmt(dt: string | null) {
   if (!dt) return "—";
   return new Date(dt).toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" });
+}
+
+/** Human-readable relative time: "just now", "5 min ago", "3 h ago", "2 days ago". */
+function relTime(dt: string | null): string {
+  if (!dt) return "—";
+  const diffMs = Date.now() - new Date(dt).getTime();
+  if (diffMs < 0) return fmt(dt);
+  const s = Math.floor(diffMs / 1000);
+  if (s < 60)  return "just now";
+  const m = Math.floor(s / 60);
+  if (m < 60)  return `${m} min ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24)  return `${h} h ago`;
+  const days = Math.floor(h / 24);
+  if (days < 7) return `${days} day${days > 1 ? "s" : ""} ago`;
+  return fmt(dt);
 }
 
 function ipSortKey(ip: string | null) {
@@ -57,12 +74,7 @@ function dnsHeatDotClass(count: number, maxAmongPeers: number): string {
 export function DeviceTable({ devices, dnsByIp, dnsLoading, dnsError, onSelect }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>("status");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
-  const [search, setSearch] = useState("");
-  const [filterRoom, setFilterRoom] = useState("");
-  const [filterCat, setFilterCat] = useState("");
 
-  const rooms = useMemo(() => [...new Set(devices.map(d => d.room).filter(Boolean))].sort(), [devices]);
-  const cats  = useMemo(() => [...new Set(devices.map(d => d.category).filter(Boolean))].sort(), [devices]);
   const maxDnsInTable = useMemo(() => {
     let m = 1;
     for (const d of devices) {
@@ -74,14 +86,6 @@ export function DeviceTable({ devices, dnsByIp, dnsLoading, dnsError, onSelect }
 
   const sorted = useMemo(() => {
     let d = [...devices];
-    if (search) {
-      const q = search.toLowerCase();
-      d = d.filter(x =>
-        [x.hostname, x.ip, x.mac, x.manufacturer, x.room, x.category].some(v => v?.toLowerCase().includes(q))
-      );
-    }
-    if (filterRoom) d = d.filter(x => x.room === filterRoom);
-    if (filterCat)  d = d.filter(x => x.category === filterCat);
 
     d.sort((a, b) => {
       let va: string | number | boolean | null;
@@ -108,7 +112,7 @@ export function DeviceTable({ devices, dnsByIp, dnsLoading, dnsError, onSelect }
       return sortDir === "asc" ? cmp : -cmp;
     });
     return d;
-  }, [devices, search, filterRoom, filterCat, sortKey, sortDir, dnsByIp]);
+  }, [devices, sortKey, sortDir, dnsByIp]);
 
   function toggle(key: SortKey) {
     if (key === sortKey) setSortDir(d => d === "asc" ? "desc" : "asc");
@@ -126,33 +130,7 @@ export function DeviceTable({ devices, dnsByIp, dnsLoading, dnsError, onSelect }
 
   return (
     <div className="flex flex-col gap-3">
-      {/* Filters */}
-      <div className="flex flex-wrap gap-2">
-        <input
-          type="search"
-          placeholder="Search hostname, IP, MAC, room…"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="flex-1 min-w-48 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500"
-        />
-        <select
-          value={filterRoom}
-          onChange={e => setFilterRoom(e.target.value)}
-          className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200"
-        >
-          <option value="">All rooms</option>
-          {rooms.map(r => <option key={r}>{r}</option>)}
-        </select>
-        <select
-          value={filterCat}
-          onChange={e => setFilterCat(e.target.value)}
-          className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200"
-        >
-          <option value="">All categories</option>
-          {cats.map(c => <option key={c}>{c}</option>)}
-        </select>
-        <span className="self-center text-xs text-slate-500">{sorted.length} devices</span>
-      </div>
+      <p className="text-xs text-slate-500">{sorted.length} device{sorted.length !== 1 ? "s" : ""}</p>
 
       {/* Table */}
       <div className="overflow-x-auto rounded-xl border border-slate-700">
@@ -210,6 +188,18 @@ export function DeviceTable({ devices, dnsByIp, dnsLoading, dnsError, onSelect }
                 <td className="px-3 py-2 font-medium text-slate-100 whitespace-nowrap">
                   {d.hostname ?? <span className="text-slate-500 italic">Unknown</span>}
                 </td>
+                <td className="px-3 py-2 whitespace-nowrap">
+                  {d.online
+                    ? <span className="inline-flex items-center gap-1.5 text-emerald-400 text-xs font-medium">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        Online now
+                      </span>
+                    : <span className="flex flex-col gap-0.5">
+                        <span className="text-slate-300 text-xs font-medium">{relTime(d.last_seen)}</span>
+                        <span className="text-slate-500 text-xs">{fmt(d.last_seen)}</span>
+                      </span>
+                  }
+                </td>
                 <td className="px-3 py-2 font-mono text-sky-300">{d.ip ?? "—"}</td>
                 <td className="px-3 py-2 font-mono text-slate-400 text-xs">{d.mac}</td>
                 <td className="px-3 py-2 text-slate-300">{d.manufacturer ?? "—"}</td>
@@ -234,7 +224,6 @@ export function DeviceTable({ devices, dnsByIp, dnsLoading, dnsError, onSelect }
                 </td>
                 <td className="px-3 py-2 text-slate-400 max-w-64 truncate">{d.description ?? "—"}</td>
                 <td className="px-3 py-2 text-slate-500 text-xs whitespace-nowrap">{fmt(d.first_seen)}</td>
-                <td className="px-3 py-2 text-slate-400 text-xs whitespace-nowrap">{fmt(d.last_seen)}</td>
               </tr>
             ))}
           </tbody>

@@ -7,20 +7,20 @@ running in Docker containers on the QNAP NAS.
 
 | Service | Image | Port |
 |---|---|---|
-| PostgreSQL 16 | postgres:16-alpine | 5432 |
-| pgAdmin 4 | dpage/pgadmin4 | **25050** (host; see `docker-compose.yml`) |
+| PostgreSQL 16 | postgres:16.6-alpine | **127.0.0.1:5432** (LAN not published; see `docker-compose.yml`) |
+| pgAdmin 4 | dpage/pgadmin4:9.2 | **25050** (host; see `docker-compose.yml`) |
 | FastAPI API | ./api | **8000** (uses **host network** on Linux so ARP reaches the LAN) |
 | React UI (nginx) | ./web | **8080** — on QNAP, if **8080** is busy, map **8880:80** instead |
 
-## pgAdmin Login
+## pgAdmin
 
-| Field | Value |
-|---|---|
-| URL | http://192.168.0.150:25050 |
-| Email | `admin@familypotter.local` |
-| Password | `Chester123!pg` |
+URL (example): `http://192.168.0.150:25050`
 
-The `netmonitor` database is pre-configured as a server connection.
+Login email and password come from **`PGADMIN_DEFAULT_EMAIL`** and **`PGADMIN_DEFAULT_PASSWORD`** in [`.env`](.env) (see [`.env.example`](.env.example)). The `netmonitor` database is pre-configured as a server connection in [`db/pgadmin-servers.json`](db/pgadmin-servers.json).
+
+With **`PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED`** enabled in [`docker-compose.yml`](docker-compose.yml), pgAdmin prompts for a **master password** on first use; choose a strong one and store it safely (password manager).
+
+**Security:** If you ever committed real passwords to docs or git, rotate pgAdmin login, the master password, PostgreSQL (`POSTGRES_PASSWORD`), and AdGuard API credentials (`ADGUARD_PASSWORD`) before relying on this stack.
 
 ## Quick Start (on NAS via Container Station)
 
@@ -28,10 +28,19 @@ The `netmonitor` database is pre-configured as a server connection.
 # 1. Copy repo to NAS share, cd into it
 cd /share/Container/netmonitor
 
-# 2. Start all containers
+# 2. Create secrets file (see .env.example)
+cp .env.example .env
+# Edit .env — strong passwords required
+
+# 3. Device inventory (first run seeds an empty DB from SQL)
+#    - New clones: optional `cp db/seed_inventory.example.sql db/seed_inventory.sql` and customize.
+#    - If you had a private `seed_inventory.sql` in git before, recover it from history into
+#      `db/seed_inventory.sql` (that path is gitignored) so you keep your real MAC/IP list.
+
+# 4. Start all containers
 docker compose up -d
 
-# 3. Check logs
+# 5. Check logs
 docker compose logs -f api
 ```
 
