@@ -1,6 +1,6 @@
-# FamilyPotter Home Network — Architecture & Operations Guide
+﻿# FamilyPotter Home Network — Architecture & Operations Guide
 
-> **Last updated:** 2026-05-04  
+> **Last updated:** 2026-05-08 (HIK CCTV MACs added; ip_type set to Static in network monitor DB)  
 > **Status:** Live — cutover to Starlink/QNAP gateway complete
 
 ---
@@ -65,8 +65,19 @@ flowchart TD
         TLSwitch["TP-Link TL-SG108PE\n8-port Gigabit PoE+\n(primary switch)"]
         GSSwitch["NETGEAR GS116\n16-port Gigabit\n(room 2 expansion)"]
 
-        subgraph WiFi["WiFi (⏳ pending AP config)"]
-            AX1500["AX1500 WiFi AP\n192.168.0.2 (planned)"]
+        subgraph WiFi["WiFi"]
+            DecoX1500["TP-Link Deco X1500\nMain Node\n192.168.0.2"]
+        end
+
+        subgraph CCTV["CCTV"]
+            HIKGate["HIK CCTV Gate (Side)\n192.168.0.35\n(PoE port 1 — TL-SG108PE)"]
+            HIKFront["HIK CCTV Front\n192.168.0.36\n(PoE port 2 — TL-SG108PE)"]
+            HIKRear["HIK CCTV Rear\n192.168.0.31\n(PoE port 3 — TL-SG108PE)"]
+            HIKNVR["HIK NVR\nDS-7608NI-E2/8P/A\n192.168.0.15"]
+            HIKGarage["HIK CCTV Garage\n192.168.0.33\n(dedicated PoE PSU)"]
+            DownstreamSwitch["Downstream Switch\n(unmanaged, no PoE)"]
+            HIKGateRoad["HIK CCTV Gate (Road)\n192.168.0.30\n(dedicated PoE PSU)"]
+            HIKChickens["HIK CCTV Chickens\n192.168.0.32\n(offline)"]
         end
 
         subgraph Wired["Wired Devices"]
@@ -112,16 +123,24 @@ flowchart TD
     eth0 --> Tailscale
     eth0 --> ddclient
     AdGuard -->|"DHCP leases\nDNS responses\nbound on eth1"| eth1
-    eth1 -->|"1 Gbps"| TLSwitch
-    TLSwitch --> GSSwitch
-    TLSwitch --> AX1500
+    eth1 -->|"1 Gbps → port 8"| TLSwitch
+    TLSwitch -->|"port 1 PoE"| HIKGate
+    TLSwitch -->|"port 2 PoE"| HIKFront
+    TLSwitch -->|"port 3 PoE"| HIKRear
+    TLSwitch -->|"port 5"| Fingbox
+    TLSwitch -->|"port 6"| GSSwitch
+    TLSwitch -->|"port 7"| DecoX1500
     TLSwitch --> PROMAX
     TLSwitch --> SDPLAPTOP
     TLSwitch --> MAINDESK
-    TLSwitch --> Fingbox
     TLSwitch --> SkyQMain
     TLSwitch --> SkyQSat1
     GSSwitch --> SkyQSat2
+    GSSwitch --> HIKNVR
+    GSSwitch --> HIKGarage
+    GSSwitch --> DownstreamSwitch
+    DownstreamSwitch --> HIKGateRoad
+    DownstreamSwitch --> HIKChickens
     TLSwitch --> SonosL
     TLSwitch --> SonosD
     TLSwitch --> SonosF
@@ -176,26 +195,59 @@ Device (e.g. PROMAX)
 | **Model** | QNAP TS-264 |
 | **NIC** | Intel 2.5GbE dual-port |
 | **eth0** | WAN — connected to Starlink Gen 3 LAN port — MAC `24:5E:BE:6D:25:88` |
-| **eth1** | LAN — connected to TP-Link TL-SG108PE — MAC `24:5E:BE:6D:25:89` — IP `192.168.0.150` |
+| **eth1** | LAN — connected to TP-Link TL-SG108PE port 8 — MAC `24:5E:BE:6D:25:89` — IP `192.168.0.150` |
 | **OS** | QNAP QTS |
 | **Container runtime** | Container Station (Docker Compose) |
 | **Stack path on NAS** | `/share/CACHEDEV1_DATA/Container/familypotter-network/` |
 
 ### Switching
 
-| Switch | Ports | Location | Connected to |
-|---|---|---|---|
-| TP-Link TL-SG108PE | 8-port Gigabit PoE+ | Primary room | NAS eth1 → all primary devices |
-| NETGEAR GS116 | 16-port Gigabit | Room 2 | Uplinked to TL-SG108PE |
+| Switch | Ports | MAC Address | Location | Connected to |
+|---|---|---|---|---|
+| TP-Link TL-SG108PE | 8-port Gigabit PoE+ | `50-3D-D1-52-4A-99` | Primary room | NAS eth1 (port 8) → all primary devices — management UI: `http://192.168.0.105` |
+| NETGEAR GS116 | 16-port Gigabit | – | Room 2 | Uplinked to TL-SG108PE port 6 – hosts NVR (192.168.0.15) and garage camera (192.168.0.33, dedicated PoE PSU); a further downstream unmanaged switch carries gate-road camera (192.168.0.30) and chickens camera (192.168.0.32), both with dedicated PoE PSUs. GS116 has no PoE. |
 
-### WiFi (Pending Configuration)
+> **Note:** The TL-SG108PE replaced the previous NETGEAR ProSafe FS108P.
+
+#### TL-SG108PE Port Map
+
+Live link status queried 2026-05-08 — all ports show **0 bad packets**.
+
+| Port | PoE | Hostname | Device | Link Status | Notes |
+|---|---|---|---|---|---|
+| 1 | ✅ | HIK CCTV Gate | HikVision PoE camera — Gate | **100Full** | Expected — HikVision cameras are 100BASE-TX only |
+| 2 | ✅ | HIK CCTV Front | HikVision PoE camera — Front | **100Full** | Expected — HikVision cameras are 100BASE-TX only |
+| 3 | ✅ | HIK CCTV Rear | HikVision PoE camera — Rear | **100Full** | Expected — HikVision cameras are 100BASE-TX only |
+| 4 | — | *(empty)* | — | Link Down | — |
+| 5 | — | Fingbox | Fing network monitor | **100Full** | Fingbox NIC or cable limited to 100 Mbps |
+| 6 | – | GS116 | NETGEAR GS116 uplink (room 2 expansion) | **1000Full** | – |
+| 7 | – | Deco X1500 Main Node | TP-Link Deco X1500 (main mesh node) | **1000Full** | – |
+| 8 | — | CALGARYHOUSE | QNAP NAS eth1 (`192.168.0.150`) | **1000Full** | — |
+
+### WiFi
 
 | Item | Detail |
 |---|---|
-| **Model** | AX1500 (TP-Link or equivalent) |
-| **Mode** | To be set to **Access Point** (not Router) |
-| **Planned IP** | `192.168.0.2` |
-| **Connection** | LAN port → TL-SG108PE |
+| **Model** | TP-Link Deco X1500 |
+| **Role** | Main mesh node (Access Point mode) |
+| **IP** | `192.168.0.2` |
+| **Connection** | LAN port → TL-SG108PE port 7 |
+
+### CCTV Devices
+
+All HikVision cameras and NVR use **fixed IPs configured directly on the device** (not DHCP reservations — AdGuard has no DHCP leases for these devices). MACs sourced from network monitor DB (live ARP discovery).
+
+| Device | Hostname | IP | Model | Serial Number | Firmware | Connection | PoE Source |
+|---|---|---|---|---|---|---|---|
+| NVR | hikcctv-nvr | 192.168.0.15 | DS-7608NI-E2/8P/A | DS-7608NI-E2/8P/A0820151105AARR552418366WCVU | 170228 | GS116 | — (NVR, not camera) |
+| Camera — Gate (Side) | hikcctv-gate-side | 192.168.0.35 | DS-2CD2342WD-I | DS-2CD2342WD-I20150814BBWR534984342 | V5.4.5 build 170124 | TL-SG108PE port 1 | Switch PoE |
+| Camera — Front | hikcctv-front | 192.168.0.36 | DS-2CD2386G2-I | DS-2CD2386G2-I20191212AAWRD98231918 | V5.5.97 build 190712 | TL-SG108PE port 2 | Switch PoE |
+| Camera — Rear | hikcctv-rear | 192.168.0.31 | DS-2CD2322WD-I | DS-2CD2322WD-I20160129BBWR572690415 | V5.4.5 build 170124 | TL-SG108PE port 3 | Switch PoE |
+| Camera — Garage | hikcctv-garage | 192.168.0.33 | DS-2CD2355FWD-I/G | DS-2CD2355FWD-I/G20170713AAWR798539497 | V5.5.97 build 190712 | GS116 | Dedicated PoE PSU |
+| Camera — Gate (Road) | hikcctv-gate | 192.168.0.30 | DS-2CD2642FWD-IS | DS-2CD2642FWD-IS20160415BBWR591755936 | V5.4.5 build 170124 | Switch off GS116 | Dedicated PoE PSU |
+| Camera — Chickens | hikcctv-chickens | 192.168.0.32 | Unknown | — | — | Switch off GS116 | — (currently offline) |
+
+> **Note:** GS116 itself has no PoE. Garage and gate-road cameras use dedicated PoE PSUs. A further unmanaged downstream switch off the GS116 carries the gate-road and chickens cameras.
 
 ---
 
@@ -366,7 +418,8 @@ ddclient runs as a Docker container and updates the DNS record `familypotter.ddn
 |---|---|
 | `192.168.0.1` | Reserved (formerly Sky ER110 gateway) |
 | `192.168.0.2` | AX1500 WiFi AP management (planned) |
-| `192.168.0.20`–`.29` | Reserved for HikVision cameras (planned) |
+| `192.168.0.15` | HikVision NVR (`hikcctv-nvr`) |
+| `192.168.0.20`–`.36` | HikVision CCTV cameras – active: `.30`–`.36`; `.20`–`.29` reserved/unallocated. **All CCTV devices use fixed IPs configured directly on the device** (not DHCP reservations) |
 | `192.168.0.51`–`.51` | Sky Q Main |
 | `192.168.0.52`–`.248` | Dynamic DHCP pool |
 | `192.168.0.150` | QNAP NAS (eth1) — gateway + DNS |
@@ -391,6 +444,14 @@ ddclient runs as a Docker container and updates the DNS record `familypotter.ddn
 | fingbox | 192.168.0.144 | f0:23:b9:eb:12:f9 | Fing network monitor |
 | qnap-nas-eth1 | 192.168.0.151 | 24:5e:be:6d:25:89 | NAS eth1 (self-record) |
 | czkawka-dedup | 192.168.0.78 | 02:eb:43:1c:19:40 | Czkawka deduplication tool |
+| hikcctv-nvr | 192.168.0.15 | 28:57:be:86:bf:00 | Fixed IP (device-configured) — HikVision NVR – DS-7608NI-E2/8P/A – on GS116 |
+| hikcctv-gate | 192.168.0.30 | bc:ad:28:22:20:7c | Fixed IP (device-configured) — HikVision camera – Gate (Road) – DS-2CD2642FWD-IS – downstream switch off GS116 (dedicated PoE PSU) |
+| hikcctv-rear | 192.168.0.31 | 28:57:be:b5:99:de | Fixed IP (device-configured) — HikVision camera – Rear – DS-2CD2322WD-I – TL-SG108PE port 3 |
+| hikcctv-chickens | 192.168.0.32 | – (TBC — offline) | Fixed IP (device-configured) — HikVision camera – Chickens – currently offline – downstream switch off GS116 |
+| hikcctv-garage | 192.168.0.33 | 4c:bd:8f:3d:f2:1d | Fixed IP (device-configured) — HikVision camera – Garage – DS-2CD2355FWD-I/G – GS116 (dedicated PoE PSU) |
+| hikcctv-gate-side | 192.168.0.35 | c4:2f:90:7b:14:6f | Fixed IP (device-configured) — HikVision camera – Gate (Side) – DS-2CD2342WD-I – TL-SG108PE port 1 |
+| hikcctv-front | 192.168.0.36 | 98:df:82:48:75:e4 | Fixed IP (device-configured) — HikVision camera – Front – DS-2CD2386G2-I – TL-SG108PE port 2 |
+| Samsung C460 Printer | 192.168.0.87 | 30:cd:a7:3d:44:4f | Samsung C460 Colour Printer |
 
 ---
 
@@ -571,7 +632,7 @@ docker compose up -d          # recreate changed containers
 | AdGuard Home UI | http://192.168.0.150:3000 |
 | QNAP QTS UI | http://192.168.0.150:8080 |
 | NAS SSH | `ssh admin@192.168.0.150` |
-| Home Assistant (future) | http://192.168.0.150:8123 |
+| Home Assistant | http://192.168.0.150:8123 |
 
 ### From Outside (Tailscale Connected)
 
@@ -585,10 +646,10 @@ Tailscale admin: https://login.tailscale.com/admin (login with GitHub `familypot
 
 | Phase | Enhancement | Status |
 |---|---|---|
-| 3 | AX1500 WiFi Access Point | ⏳ Pending |
-| 4 | HikVision cameras | ⏳ Pending |
+| 3 | TP-Link Deco X1500 WiFi (main node) | ✅ Active — port 6 of TL-SG108PE |
+| 4 | HikVision PoE cameras (full system) | ✅ Active — 7 devices total (6 cameras + NVR); all firmware versions on record. Cameras on TL-SG108PE ports 1–3, GS116, and downstream switch off GS116 |
 | 5 | Sonos DHCP verification | ⏳ Verify after next reboot |
-| 6 | Home Assistant container | ⏳ Pending |
+| 6 | Home Assistant container | ✅ Active — running at http://192.168.0.150:8123 |
 | 7 | WireGuard VPN | ⏳ Waiting for public IP |
 
 See `DHCP/.cursor/plans/familypotter_network_cutover_8e344924.plan.md` for full details on each phase.

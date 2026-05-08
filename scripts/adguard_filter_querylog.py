@@ -3,6 +3,7 @@ Remove AdGuard query log entries matching a pattern.
 Edit FILTER_PATTERN below — supports any substring, e.g. "bbc", "192.168.0.104", "doubleclick".
 Case-insensitive match against the raw JSON line (domain name, client IP, answer, etc.).
 """
+import os
 import paramiko, sys, time
 
 # ── Change this to whatever you want to filter out ──────────────────────────
@@ -37,7 +38,11 @@ def ssh(client, cmd, timeout=30):
 
 c = paramiko.SSHClient()
 c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-c.connect("192.168.0.150", port=22, username="admin", password="UlrTdq05#L", timeout=10)
+
+_ssh_pw = os.environ.get("NAS_SSH_PASSWORD", "").strip()
+if not _ssh_pw:
+    raise SystemExit("Set NAS_SSH_PASSWORD — see scratch_scripts_env.md")
+c.connect("192.168.0.150", port=22, username="admin", password=_ssh_pw, timeout=10)
 print("Connected.", flush=True)
 
 # ── Step 1: count matching entries ──────────────────────────────────────────

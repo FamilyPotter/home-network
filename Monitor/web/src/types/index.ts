@@ -66,6 +66,30 @@ export interface AdguardQuery {
   tracker_org: string | null;
 }
 
+export interface SwitchPort {
+  port: number;
+  enabled: boolean;
+  poe: boolean;
+  device: string;
+  description: string;
+  link_status: string;
+  speed_mbps: number | null;
+  duplex: string | null;
+  up: boolean;
+  tx_good: number;
+  tx_bad: number;
+  rx_good: number;
+  rx_bad: number;
+}
+
+export interface SwitchData {
+  switch: string;
+  switch_ip: string;
+  live: boolean;
+  note: string | null;
+  ports: SwitchPort[];
+}
+
 export type SortKey = keyof Pick<
   Device,
   "hostname" | "ip" | "mac" | "manufacturer" | "category" | "room" |

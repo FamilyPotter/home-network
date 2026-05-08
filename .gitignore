@@ -2,6 +2,9 @@
 # FamilyPotter Network Stack — .gitignore
 # =============================================================================
 
+# Session / switch debug dumps
+switch_cookies.txt
+
 # Secrets — never commit these
 .env
 DDNS/ddclient.conf

@@ -2,10 +2,14 @@
 1. Deploy fixed schemas.py to API container (restart api only)
 2. Add Deco X1500 devices to HA via ping integration + device registry area assignments
 """
+import os
 import sys, paramiko, time, json, random
-sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
-HOST, PORT, USER, PASS = "192.168.0.150", 22, "admin", "UlrTdq05#L"
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+_PASS = os.environ.get("NAS_SSH_PASSWORD", "").strip()
+if not _PASS:
+    raise SystemExit("Set NAS_SSH_PASSWORD — see scratch_scripts_env.md")
+HOST, PORT, USER, PASS = "192.168.0.150", 22, "admin", _PASS
 DOCKER = "/share/CACHEDEV1_DATA/.qpkg/container-station/bin/docker"
 MON    = "/share/Container/netmonitor"
 HA_CFG = "/share/Calgary House/Container/HomeAssistant/config"

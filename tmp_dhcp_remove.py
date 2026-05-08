@@ -1,8 +1,13 @@
 """Remove DHCP lease for c6:6f:be:a5:27:fd with correct hostname."""
+import os
 import sys, paramiko, time, json
-sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
-HOST, PORT, USER, PASS = "192.168.0.150", 22, "admin", "UlrTdq05#L"
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
+_PASS = os.environ.get("NAS_SSH_PASSWORD", "").strip()
+if not _PASS:
+    raise SystemExit("Set NAS_SSH_PASSWORD — see scratch_scripts_env.md")
+HOST, PORT, USER, PASS = "192.168.0.150", 22, "admin", _PASS
 MON = "/share/Container/netmonitor"
 
 def ssh(c, cmd, timeout=30):

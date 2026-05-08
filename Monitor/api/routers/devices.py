@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select
+from sqlalchemy import delete as sql_delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
@@ -74,7 +74,7 @@ async def delete_device(device_id: uuid.UUID, db: AsyncSession = Depends(get_db)
     d = await db.get(Device, device_id)
     if not d:
         raise HTTPException(404, "Device not found")
-    await db.delete(d)
+    await db.execute(sql_delete(Device).where(Device.id == device_id))
     await db.commit()
 
 

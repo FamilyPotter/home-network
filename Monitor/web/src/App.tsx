@@ -9,6 +9,7 @@ import { AlertBanner } from "./components/AlertBanner";
 import { TrafficChart } from "./components/TrafficChart";
 import { TrackerTab } from "./components/TrackerTab";
 import { AlertsTab } from "./components/AlertsTab";
+import { SwitchTab } from "./components/SwitchTab";
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null };
@@ -36,7 +37,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
   }
 }
 
-type Tab = "devices" | "traffic" | "trackers" | "alerts";
+type Tab = "devices" | "traffic" | "trackers" | "alerts" | "switch";
 
 /** Must match Monitor API `ALLOWED_SCAN_INTERVAL_SEC`. */
 const SCAN_INTERVAL_OPTIONS: { label: string; seconds: number }[] = [
@@ -63,6 +64,7 @@ export default function App() {
   const [globalSearch, setGlobalSearch] = useState("");
   const [globalRoom,   setGlobalRoom]   = useState("");
   const [globalCat,    setGlobalCat]    = useState("");
+  const [globalKnown,  setGlobalKnown]  = useState<"" | "known" | "unknown">("");
 
   useEffect(() => {
     apiFetch<{ seconds: number }>("/settings/scan-interval")
@@ -110,12 +112,14 @@ export default function App() {
           .some(v => v?.toLowerCase().includes(q)),
       );
     }
-    if (globalRoom) d = d.filter(x => x.room === globalRoom);
-    if (globalCat)  d = d.filter(x => x.category === globalCat);
+    if (globalRoom)              d = d.filter(x => x.room === globalRoom);
+    if (globalCat)               d = d.filter(x => x.category === globalCat);
+    if (globalKnown === "unknown") d = d.filter(x => !x.known);
+    else if (globalKnown === "known") d = d.filter(x => x.known);
     return d;
-  }, [allDevices, globalSearch, globalRoom, globalCat]);
+  }, [allDevices, globalSearch, globalRoom, globalCat, globalKnown]);
 
-  const hasGlobalFilter = globalSearch !== "" || globalRoom !== "" || globalCat !== "";
+  const hasGlobalFilter = globalSearch !== "" || globalRoom !== "" || globalCat !== "" || globalKnown !== "";
 
   const filteredDeviceIps = useMemo(
     () => hasGlobalFilter
@@ -211,8 +215,25 @@ export default function App() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <StatCard label="Total Devices"   value={stats.total_devices}   icon={<Server size={20} />}        accent="blue"  />
             <StatCard label="Online Now"      value={stats.online_devices}  icon={<Wifi size={20} />}          accent="green" />
-            <StatCard label="Unknown Devices" value={stats.unknown_devices} icon={<Search size={20} />}        accent="amber" />
-            <StatCard label="Unack Alerts"    value={stats.alerts_unack}    icon={<AlertTriangle size={20} />} accent={stats.alerts_unack > 0 ? "red" : "blue"} />
+            <StatCard
+              label="Unknown Devices"
+              value={stats.unknown_devices}
+              icon={<Search size={20} />}
+              accent="amber"
+              tooltip={`${stats.unknown_devices} device${stats.unknown_devices !== 1 ? "s" : ""} with no inventory entry — click to filter`}
+              onClick={() => {
+                setGlobalKnown("unknown");
+                setTab("devices");
+              }}
+            />
+            <StatCard
+              label="Unack Alerts"
+              value={stats.alerts_unack}
+              icon={<AlertTriangle size={20} />}
+              accent={stats.alerts_unack > 0 ? "red" : "blue"}
+              tooltip={`${stats.alerts_unack} unacknowledged alert${stats.alerts_unack !== 1 ? "s" : ""} — click to view`}
+              onClick={() => setTab("alerts")}
+            />
           </div>
         )}
 
@@ -249,6 +270,24 @@ export default function App() {
             <option value="">All categories</option>
             {cats.map(c => <option key={c}>{c}</option>)}
           </select>
+          {globalKnown === "unknown" && (
+            <button
+              onClick={() => setGlobalKnown("")}
+              className="flex items-center gap-1 text-xs bg-amber-500/15 text-amber-300 border border-amber-500/30 hover:border-amber-500/60 px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap"
+              title="Remove unknown-only filter"
+            >
+              Unknown only <X size={10} />
+            </button>
+          )}
+          {globalKnown === "known" && (
+            <button
+              onClick={() => setGlobalKnown("")}
+              className="flex items-center gap-1 text-xs bg-sky-500/15 text-sky-300 border border-sky-500/30 hover:border-sky-500/60 px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap"
+              title="Remove known-only filter"
+            >
+              Known only <X size={10} />
+            </button>
+          )}
           <span className="text-xs text-slate-500 whitespace-nowrap">
             {hasGlobalFilter
               ? <><strong className="text-sky-400">{filteredDevices.length}</strong> of {allDevices.length} devices</>
@@ -257,7 +296,7 @@ export default function App() {
           </span>
           {hasGlobalFilter && (
             <button
-              onClick={() => { setGlobalSearch(""); setGlobalRoom(""); setGlobalCat(""); }}
+              onClick={() => { setGlobalSearch(""); setGlobalRoom(""); setGlobalCat(""); setGlobalKnown(""); }}
               className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200 px-2.5 py-1.5 rounded-lg border border-slate-700 hover:border-slate-500 transition-colors whitespace-nowrap"
             >
               <X size={11} /> Clear
@@ -267,7 +306,7 @@ export default function App() {
 
         {/* Tab nav */}
         <div className="flex gap-1 border-b border-slate-800">
-          {(["devices", "traffic", "trackers", "alerts"] as Tab[]).map(t => (
+          {(["devices", "traffic", "trackers", "alerts", "switch"] as Tab[]).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -325,6 +364,8 @@ export default function App() {
             filteredDeviceIds={filteredDeviceIds}
           />
         )}
+
+        {tab === "switch" && <SwitchTab />}
 
       </main>
 

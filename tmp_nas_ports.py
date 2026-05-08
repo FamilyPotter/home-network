@@ -1,9 +1,13 @@
+import os
+
 import paramiko
 
 HOST = "192.168.0.150"
 PORT = 22
 USER = "admin"
-PASSWORD = "UlrTdq05#L"
+PASSWORD = os.environ.get("NAS_SSH_PASSWORD", "").strip()
+if not PASSWORD:
+    raise SystemExit("Set NAS_SSH_PASSWORD — see scratch_scripts_env.md")
 DOCKER_BIN = "/share/CACHEDEV1_DATA/.qpkg/container-station/bin/docker"
 
 ssh = paramiko.SSHClient()

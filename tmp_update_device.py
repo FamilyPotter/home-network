@@ -1,7 +1,11 @@
+import os
 import sys, paramiko, time
-sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
-HOST, PORT, USER, PASS = "192.168.0.150", 22, "admin", "UlrTdq05#L"
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+_PASS = os.environ.get("NAS_SSH_PASSWORD", "").strip()
+if not _PASS:
+    raise SystemExit("Set NAS_SSH_PASSWORD — see scratch_scripts_env.md")
+HOST, PORT, USER, PASS = "192.168.0.150", 22, "admin", _PASS
 
 def ssh(c, cmd, timeout=20):
     chan = c.get_transport().open_session()

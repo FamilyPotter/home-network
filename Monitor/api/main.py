@@ -11,7 +11,7 @@ from config import settings
 from constants import KEY_POLL_INTERVAL, coerce_scan_interval
 from database import AsyncSessionLocal, engine
 from models import Alert, Base, Device, MonitorSetting, ScanEvent
-from routers import adguard, alerts, devices, scans
+from routers import adguard, alerts, devices, scans, switch
 from routers.scan_interval import router as scan_interval_router
 from scheduler import build_scheduler
 from scheduler_state import get_scheduler, set_scheduler
@@ -38,6 +38,7 @@ app.include_router(scans.router)
 app.include_router(alerts.router)
 app.include_router(adguard.router)
 app.include_router(scan_interval_router)
+app.include_router(switch.router)
 
 
 async def load_scan_interval_sec() -> int:
