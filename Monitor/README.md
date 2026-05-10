@@ -22,6 +22,10 @@ With **`PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED`** enabled in [`docker-compose.y
 
 **Security:** If you ever committed real passwords to docs or git, rotate pgAdmin login, the master password, PostgreSQL (`POSTGRES_PASSWORD`), and AdGuard API credentials (`ADGUARD_PASSWORD`) before relying on this stack.
 
+## Related stack: Efficiency Monitor (Smart House)
+
+A separate Docker project (**efficiency_monitor** on GitHub) runs **`efficientymonitor-*`** containers for temperature / weather / future COP analytics. It uses **different** `container_name` values and **different ports** (e.g. web **9080**, pgAdmin **9050**) so this **netmonitor** stack is unchanged. Deploy it in its own folder (e.g. next to `/share/Container/netmonitor`).
+
 ## Quick Start (on NAS via Container Station)
 
 ```bash
